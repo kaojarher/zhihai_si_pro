@@ -1,0 +1,2257 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="theme-blue">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- PWA -->
+    <link rel="manifest" href="manifest.webmanifest">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="智海AI">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png">
+    <title>智海 AI - 本土化智慧學習平台</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome 圖標 -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#eff6ff',
+                            100: '#dbeafe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 主題色彩定義 */
+        body.theme-blue { --bg-main: #f8fafc; --sidebar-bg: #ffffff; --card-bg: #ffffff; --text-main: #1e293b; --accent: #3b82f6; }
+        body.theme-dark { --bg-main: #0f172a; --sidebar-bg: #1e293b; --card-bg: #1e293b; --text-main: #f8fafc; --accent: #60a5fa; }
+        body.theme-morandi { --bg-main: #f4f4f2; --sidebar-bg: #e9e9e6; --card-bg: #ffffff; --text-main: #4a4a48; --accent: #879a85; }
+        body.theme-warm { --bg-main: #fefae0; --sidebar-bg: #faedcd; --card-bg: #ffffff; --text-main: #603813; --accent: #dda15e; }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-main);
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .custom-sidebar { background-color: var(--sidebar-bg); }
+        .custom-card { background-color: var(--card-bg); }
+        
+        /* 字體大小變數支援 */
+        body.font-small { font-size: 14px; }
+        body.font-medium { font-size: 16px; }
+        body.font-large { font-size: 18px; }
+    </style>
+</head>
+<body class="theme-blue font-medium flex h-screen overflow-hidden">
+
+    <!-- 側邊導覽列 (Sidebar) -->
+    <aside class="custom-sidebar w-64 border-r border-slate-200 dark:border-slate-700 flex flex-col justify-between hidden md:flex transition-colors duration-300">
+        <div>
+            <!-- Logo 區域 -->
+            <div class="h-16 flex items-center px-6 border-b border-slate-100 dark:border-slate-700">
+                <i class="fa-solid fa-water text-brand-600 text-2xl mr-3"></i>
+                <span class="text-xl font-bold tracking-wider">智海<span class="text-brand-500">AI</span></span>
+            </div>
+            <!-- 導覽連結 -->
+            <nav class="p-4 space-y-1">
+                <button onclick="switchTab('dashboard')" id="nav-dashboard" class="w-full flex items-center px-4 py-3 rounded-xl text-left font-medium transition-colors bg-brand-500 text-white shadow-sm">
+                    <i class="fa-solid fa-chart-pie w-6 mr-2"></i>學習儀表板
+                </button>
+                <button onclick="switchTab('courses')" id="nav-courses" class="w-full flex items-center px-4 py-3 rounded-xl text-left font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                    <i class="fa-solid fa-graduation-cap w-6 mr-2"></i>課程學習區
+                </button>
+                <button onclick="switchTab('documents')" id="nav-documents" class="w-full flex items-center px-4 py-3 rounded-xl text-left font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                    <i class="fa-solid fa-file-arrow-up w-6 mr-2"></i>文件匯入中心
+                </button>
+                <button onclick="switchTab('notes')" id="nav-notes" class="w-full flex items-center px-4 py-3 rounded-xl text-left font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                    <i class="fa-solid fa-note-sticky w-6 mr-2"></i>AI 筆記摘要
+                </button>
+                <button onclick="switchTab('flash')" id="nav-flash" class="w-full flex items-center px-4 py-3 rounded-xl text-left font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                    <i class="fa-solid fa-clone w-6 mr-2"></i>AI 閃卡
+                </button>
+                <button onclick="switchTab('board')" id="nav-board" class="w-full flex items-center px-4 py-3 rounded-xl text-left font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                    <i class="fa-solid fa-chalkboard w-6 mr-2"></i>FlomiAI 視覺白板
+                </button>
+                <button onclick="switchTab('quiz')" id="nav-quiz" class="w-full flex items-center px-4 py-3 rounded-xl text-left font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                    <i class="fa-solid fa-clipboard-question w-6 mr-2"></i>互動測驗
+                </button>
+                <button onclick="switchTab('mentor')" id="nav-mentor" class="w-full flex items-center px-4 py-3 rounded-xl text-left font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                    <i class="fa-solid fa-robot w-6 mr-2"></i>AI 導師問答
+                </button>
+                <div class="px-4 pt-4 pb-1 text-xs font-semibold text-slate-400">延伸工具</div>
+                <button onclick="switchTab('slides')" id="nav-slides" class="w-full flex items-center px-4 py-3 rounded-xl text-left font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"><i class="fa-solid fa-display w-6 mr-2"></i>簡報工坊</button>
+                <button onclick="switchTab('mdtool')" id="nav-mdtool" class="w-full flex items-center px-4 py-3 rounded-xl text-left font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"><i class="fa-brands fa-markdown w-6 mr-2"></i>MD 轉錄工具</button>
+            </nav>
+        </div>
+
+        <!-- 底部設定與資料管理 -->
+        <div class="p-4 border-t border-slate-100 dark:border-slate-700 space-y-2">
+            <button id="pwa-install-sidebar" onclick="installPwa()" class="hidden w-full items-center px-4 py-2.5 rounded-xl text-sm font-semibold bg-brand-500 text-white hover:bg-brand-600 shadow-sm transition">
+                <i class="fa-solid fa-download w-6 mr-2"></i>安裝智海 AI App
+            </button>
+            <button onclick="openSettingsModal()" class="w-full flex items-center px-4 py-2.5 rounded-xl text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
+                <i class="fa-solid fa-gear w-6 mr-2"></i>系統與 LLM 設定
+            </button>
+            <div class="flex space-x-2">
+                <button onclick="exportData()" class="flex-1 px-3 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-xs font-semibold rounded-lg text-center transition">
+                    <i class="fa-solid fa-download mr-1"></i>備份
+                </button>
+                <label class="flex-1 px-3 py-2 bg-slate-100 dark:bg-slate-700 hover:bg-slate-200 text-xs font-semibold rounded-lg text-center cursor-pointer transition">
+                    <i class="fa-solid fa-upload mr-1"></i>還原
+                    <input type="file" id="importFile" accept=".json" onchange="importData(event)" class="hidden">
+                </label>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 主要內容區塊 -->
+    <main class="flex-1 flex flex-col h-screen overflow-hidden">
+        <!-- 頂部導覽列 -->
+        <header class="h-16 custom-card border-b border-slate-200 dark:border-slate-700 flex items-center justify-between px-6 z-10">
+            <div class="flex items-center">
+                <button class="md:hidden mr-4 text-slate-600 dark:text-slate-200" onclick="toggleMobileMenu()">
+                    <i class="fa-solid fa-bars text-xl"></i>
+                </button>
+                <h1 id="page-title" class="text-lg font-bold">學習儀表板</h1>
+            </div>
+            <div class="flex items-center space-x-4">
+                <div class="hidden sm:flex items-center bg-slate-100 dark:bg-slate-800 px-3 py-1.5 rounded-full text-xs">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 mr-2 animate-pulse"></span>
+                    <span id="current-llm-badge" class="font-medium">GPT-4o (預設)</span>
+                </div>
+                <button onclick="openSettingsModal()" class="p-2 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition">
+                    <i class="fa-solid fa-sliders text-slate-600 dark:text-slate-300"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- 內容滾動視窗 -->
+        <div class="flex-1 overflow-y-auto p-6" id="content-container">
+
+            <!-- 1. 學習儀表板 (Dashboard) -->
+            <section id="tab-dashboard" class="space-y-6">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+                    <div class="custom-card p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-slate-500 font-medium">課程總數</span>
+                            <i class="fa-solid fa-clock text-blue-500 bg-blue-50 dark:bg-blue-900/30 p-3 rounded-xl"></i>
+                        </div>
+                        <h2 id="dash-course-count" class="text-3xl font-bold mt-4">0 <span class="text-sm font-normal text-slate-400">門</span></h2>
+                        <span class="text-xs text-emerald-500 font-medium mt-2 inline-block"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>由匯入文件自動建立</span>
+                    </div>
+                    <div class="custom-card p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-slate-500 font-medium">已完成課程</span>
+                            <i class="fa-solid fa-book-open text-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 p-3 rounded-xl"></i>
+                        </div>
+                        <h2 id="dash-done-count" class="text-3xl font-bold mt-4">0 <span class="text-sm font-normal text-slate-400">/ 0 門</span></h2>
+                        <span class="text-xs text-emerald-500 font-medium mt-2 inline-block"><i class="fa-solid fa-check mr-1"></i>所有段落皆已生成學習資料</span>
+                    </div>
+                    <div class="custom-card p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-slate-500 font-medium">本機知識文件</span>
+                            <i class="fa-solid fa-file-lines text-amber-500 bg-amber-50 dark:bg-amber-900/30 p-3 rounded-xl"></i>
+                        </div>
+                        <h2 id="dash-doc-count" class="text-3xl font-bold mt-4">0 <span class="text-sm font-normal text-slate-400">份</span></h2>
+                        <span class="text-xs text-slate-400 font-medium mt-2 inline-block">隨時可供 AI 參照</span>
+                    </div>
+                    <div class="custom-card p-6 rounded-2xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                        <div class="flex justify-between items-center">
+                            <span class="text-sm text-slate-500 font-medium">平均測驗得分</span>
+                            <i class="fa-solid fa-award text-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 p-3 rounded-xl"></i>
+                        </div>
+                        <h2 id="dash-avg-score" class="text-3xl font-bold mt-4">— <span class="text-sm font-normal text-slate-400">分</span></h2>
+                        <span class="text-xs text-emerald-500 font-medium mt-2 inline-block"><i class="fa-solid fa-star mr-1"></i>依各課程測驗紀錄計算</span>
+                    </div>
+                </div>
+
+                <!-- 推薦課程與快速導覽 -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-2 custom-card p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
+                        <h3 class="text-lg font-bold mb-4 flex items-center"><i class="fa-solid fa-bolt text-amber-500 mr-2"></i>智海 AI 智慧學習建議</h3>
+                        <div class="bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl p-6 text-white shadow-lg">
+                            <span class="bg-white/20 text-xs px-3 py-1 rounded-full font-semibold">今日重點</span>
+                            <h4 class="text-xl font-bold mt-3">掌握提示詞工程與多模態模型應用</h4>
+                            <p class="text-blue-100 text-sm mt-2">根據您上傳的文件與測驗結果，建議今日加強練習「LLM 參數微調與本機知識庫結合」章節，能有效提升對話精準度。</p>
+                            <button onclick="switchTab('courses')" class="mt-4 px-5 py-2.5 bg-white text-blue-600 font-semibold rounded-xl text-sm shadow hover:bg-blue-50 transition">開始學習</button>
+                        </div>
+                    </div>
+                    <div class="custom-card p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
+                        <h3 class="text-lg font-bold mb-4">系統快捷操作</h3>
+                        <div class="space-y-3">
+                            <button onclick="switchTab('documents')" class="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-between transition">
+                                <span class="flex items-center text-sm font-medium"><i class="fa-solid fa-file-arrow-up text-blue-500 mr-3"></i>上傳教材 (PDF/Word/PPT等)</span>
+                                <i class="fa-solid fa-chevron-right text-xs text-slate-400"></i>
+                            </button>
+                            <button onclick="switchTab('mentor')" class="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-between transition">
+                                <span class="flex items-center text-sm font-medium"><i class="fa-solid fa-robot text-purple-500 mr-3"></i>向 AI 導師提問</span>
+                                <i class="fa-solid fa-chevron-right text-xs text-slate-400"></i>
+                            </button>
+                            <button onclick="openSettingsModal()" class="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center justify-between transition">
+                                <span class="flex items-center text-sm font-medium"><i class="fa-solid fa-palette text-emerald-500 mr-3"></i>切換佈景與模型位址</span>
+                                <i class="fa-solid fa-chevron-right text-xs text-slate-400"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 2. 課程學習區 (Courses) -->
+            <section id="tab-courses" class="space-y-6 hidden">
+                <div class="flex justify-between items-center flex-wrap gap-4">
+                    <div>
+                        <h2 class="text-xl font-bold">我的課程</h2>
+                        <p class="text-sm text-slate-400">匯入文件後自動建立課程；點擊課程後，筆記、閃卡、測驗與 AI 導師都會以該課程為範圍</p>
+                    </div>
+                    <div class="flex space-x-2" id="course-filters"></div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6" id="course-grid"></div>
+            </section>
+
+            <!-- 3. 文件匯入中心 (Documents) -->
+            <section id="tab-documents" class="space-y-6 hidden">
+                <div class="custom-card p-8 rounded-2xl border border-slate-200 dark:border-slate-700 text-center">
+                    <div class="max-w-xl mx-auto">
+                        <div class="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl p-8 hover:border-brand-500 transition cursor-pointer" onclick="document.getElementById('doc-upload-input').click()">
+                            <i class="fa-solid fa-cloud-arrow-up text-4xl text-brand-500 mb-3"></i>
+                            <h3 class="font-bold text-lg">上傳學習教材與文件</h3>
+                            <p class="text-xs text-slate-400 mt-1">支援 PDF, TXT, MD, DOCX, XLSX, PPTX 格式</p>
+                            <input type="file" id="doc-upload-input" multiple accept=".pdf,.txt,.md,.csv,.json,.docx,.xlsx,.pptx" class="hidden" onchange="handleDocumentUpload(event)">
+                            <button class="mt-4 px-4 py-2 bg-brand-500 text-white text-sm font-semibold rounded-xl shadow hover:bg-brand-600 transition">選擇檔案</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="custom-card p-6 rounded-2xl border border-slate-200 dark:border-slate-700">
+                    <h3 class="font-bold text-lg mb-4 flex items-center"><i class="fa-solid fa-folder-open text-amber-500 mr-2"></i>本機知識庫列表</h3>
+                    <div id="document-list" class="space-y-3"></div>
+                </div>
+            </section>
+
+            <!-- 4. AI 筆記摘要 (Notes) -->
+            <section id="tab-notes" class="space-y-6 hidden">
+                <div id="bar-notes"></div>
+                <div id="panel-notes"></div>
+                <div class="flex justify-between items-center">
+                    <h2 class="text-xl font-bold">我的筆記</h2>
+                    <button onclick="openNoteModal()" class="px-4 py-2 bg-brand-500 text-white rounded-xl text-sm font-semibold shadow hover:bg-brand-600 transition flex items-center">
+                        <i class="fa-solid fa-plus mr-2"></i>新增筆記
+                    </button>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="notes-grid"></div>
+            </section>
+
+            <!-- 4b. AI 閃卡 (Flashcards) -->
+            <section id="tab-flash" class="space-y-6 hidden">
+                <div id="bar-flash"></div>
+                <div id="panel-flash"></div>
+            </section>
+
+            <!-- 5. 互動測驗 (Quiz) -->
+            <section id="tab-quiz" class="space-y-6 hidden">
+                <div id="bar-quiz"></div>
+                <div id="panel-quiz"></div>
+            </section>
+
+            <!-- 6. AI 導師問答 (Mentor) -->
+            <!-- 簡報工坊 (Gamma 式：貼稿 → 簡報) -->
+            <section id="tab-slides" class="space-y-4 hidden">
+                <div><h2 class="text-2xl font-bold">簡報工坊</h2><p class="text-sm text-slate-500">貼上稿件或 Markdown，一鍵生成簡報；可編輯、換主題、全螢幕播放，並匯出 HTML／PPTX／Markdown。</p></div>
+                <div class="grid lg:grid-cols-3 gap-4">
+                    <div class="custom-card rounded-2xl border border-slate-200 dark:border-slate-700 p-5 space-y-3 lg:col-span-1">
+                        <label class="text-sm font-semibold">貼稿區</label>
+                        <textarea id="sl-input" rows="12" class="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-transparent p-2 focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="貼上文章、會議紀錄、講稿，或輸入主題。&#10;若是 Markdown：# 為簡報標題，## 為每頁標題，- 為重點。"></textarea>
+                        <div class="grid grid-cols-2 gap-2">
+                            <select id="sl-theme" onchange="slTheme(this.value)" class="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-transparent p-2 focus:outline-none focus:ring-2 focus:ring-brand-500"><option value="ocean">深海藍</option><option value="paper">簡約白</option><option value="sunset">暖橘</option><option value="forest">森林綠</option></select>
+                            <select id="sl-count" class="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-transparent p-2 focus:outline-none focus:ring-2 focus:ring-brand-500"><option>5</option><option selected>8</option><option>12</option><option>16</option></select>
+                        </div>
+                        <p class="text-xs text-slate-400 -mt-1">左：主題風格　右：AI 生成頁數</p>
+                        <div class="flex flex-wrap gap-2">
+                            <button id="sl-ai-btn" onclick="slAi()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-500 text-white hover:bg-brand-600 transition disabled:opacity-60">AI 生成簡報</button>
+                            <button onclick="slMd()" class="px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition">依 Markdown 分頁（免 AI）</button>
+                            <button onclick="slFromCourse()" class="px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition">帶入目前課程</button>
+                        </div>
+                    </div>
+                    <div class="lg:col-span-2 space-y-3">
+                        <div id="sl-empty" class="custom-card rounded-2xl border border-slate-200 dark:border-slate-700 p-5 text-sm text-slate-500 text-center py-16">尚無簡報。請在左側貼上稿件後按「AI 生成簡報」。</div>
+                        <div id="sl-editor" class="hidden space-y-3">
+                            <div id="sl-thumbs" class="flex gap-2 overflow-x-auto pb-1"></div>
+                            <div id="sl-canvas" class="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow"></div>
+                            <div class="custom-card rounded-2xl border border-slate-200 dark:border-slate-700 p-5 space-y-2">
+                                <input id="sl-f-title" oninput="slEdit()" class="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-transparent p-2 focus:outline-none focus:ring-2 focus:ring-brand-500 font-semibold" placeholder="本頁標題">
+                                <textarea id="sl-f-bullets" oninput="slEdit()" rows="4" class="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-transparent p-2 focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="重點（每行一點）"></textarea>
+                                <textarea id="sl-f-notes" oninput="slEdit()" rows="2" class="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-transparent p-2 focus:outline-none focus:ring-2 focus:ring-brand-500" placeholder="講者備註（匯出 PPTX 時會附上）"></textarea>
+                                <div class="flex flex-wrap gap-2">
+                                    <button onclick="slOp('add')" class="px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition">＋新增頁</button><button onclick="slOp('del')" class="px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition">刪除</button>
+                                    <button onclick="slOp('up')" class="px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition">↑ 上移</button><button onclick="slOp('down')" class="px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition">↓ 下移</button>
+                                    <span class="flex-1"></span>
+                                    <button onclick="slPlay()" class="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-500 text-white hover:bg-brand-600 transition disabled:opacity-60"><i class="fa-solid fa-play mr-1"></i>播放</button>
+                                </div>
+                                <div class="flex flex-wrap gap-2 pt-2 border-t border-slate-100 dark:border-slate-700">
+                                    <span class="text-xs text-slate-400 self-center">匯出：</span>
+                                    <button onclick="slExportHtml()" class="px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition">HTML 簡報</button><button onclick="slExportPptx()" class="px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition">PPTX</button><button onclick="slExportMd()" class="px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition">Markdown</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- MD 轉錄工具 -->
+            <section id="tab-mdtool" class="space-y-4 hidden">
+                <div><h2 class="text-2xl font-bold">MD 轉錄工具</h2><p class="text-sm text-slate-500">把 PDF／DOCX／XLSX／PPTX／TXT／MD 轉成 Markdown，可用 AI 整理排版，再下載、存成課程或送到簡報工坊。</p></div>
+                <div class="custom-card rounded-2xl border border-slate-200 dark:border-slate-700 p-5 space-y-3">
+                    <div class="flex flex-wrap gap-2 items-center">
+                        <label class="px-4 py-2 rounded-xl text-xs font-semibold bg-brand-500 text-white hover:bg-brand-600 transition disabled:opacity-60 cursor-pointer"><i class="fa-solid fa-file-arrow-up mr-1"></i>選擇檔案<input type="file" class="hidden" accept=".pdf,.docx,.xlsx,.pptx,.md,.txt" onchange="mdPickFile(event)"></label>
+                        <button id="md-ai-btn" onclick="mdAi()" class="px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition">AI 整理排版</button>
+                        <button onclick="mdCopy()" class="px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition">複製</button>
+                        <button onclick="mdDownload()" class="px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition">下載 .md</button>
+                        <button onclick="mdToCourse()" class="px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition">存成課程</button>
+                        <button onclick="mdToSlides()" class="px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition">送到簡報工坊</button>            <!-- FlomiAI 視覺化互動白板 -->
+            <section id="tab-board" class="hidden h-full min-h-0 flex flex-col gap-3">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div><h2 class="text-2xl font-bold">FlomiAI 視覺化互動白板</h2><p class="text-sm text-slate-500">拖曳節點、縮放畫布、畫圖、逐步講解與白板小考；資料保存在本機。</p></div>
+                <div class="flex flex-wrap gap-2">
+                  <button class="px-3 py-2 rounded-lg bg-blue-600 text-white" onclick="fbAddNode()">＋知識卡</button>
+                  <button class="px-3 py-2 rounded-lg bg-slate-200" onclick="fbAddShape('rect')">矩形</button>
+                  <button class="px-3 py-2 rounded-lg bg-slate-200" onclick="fbAddShape('circle')">圓形</button>
+                  <button class="px-3 py-2 rounded-lg bg-slate-200" onclick="fbAddShape('arrow')">箭頭</button>
+                  <button class="px-3 py-2 rounded-lg bg-slate-200" onclick="fbToggleDraw()">✎手寫</button>
+                  <button class="px-3 py-2 rounded-lg bg-slate-200" onclick="fbConnect()">連接選取卡</button>
+                </div>
+              </div>
+              <div class="flex flex-wrap gap-2 items-center bg-white border rounded-xl p-2">
+                <button class="px-3 py-2 rounded-lg border" onclick="fbZoom(.8)">－縮小</button><button class="px-3 py-2 rounded-lg border" onclick="fbZoom(1.25)">＋放大</button><button class="px-3 py-2 rounded-lg border" onclick="fbResetView()">重設視圖</button>
+                <button class="px-3 py-2 rounded-lg border" onclick="fbAnimate()">▶逐步講解</button><button class="px-3 py-2 rounded-lg border" onclick="fbSpeak()">🔊朗讀選取卡</button>
+                <label class="px-3 py-2 rounded-lg border cursor-pointer">📷匯入圖片<input type="file" accept="image/*" class="hidden" onchange="fbImageUpload(event)"></label>
+                <button class="px-3 py-2 rounded-lg border" onclick="fbExport()">匯出白板</button><label class="px-3 py-2 rounded-lg border cursor-pointer">匯入白板<input type="file" accept=".json,application/json" class="hidden" onchange="fbImport(event)"></label>
+                <span id="fb-status" class="text-sm text-slate-500">就緒</span>
+              </div>
+              <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_280px] gap-3 flex-1 min-h-[460px]">
+                <div id="fb-viewport" class="relative overflow-hidden rounded-2xl border border-slate-300 bg-slate-50 min-h-[460px] touch-none" style="background-image:radial-gradient(#cbd5e1 1px,transparent 1px);background-size:22px 22px">
+                  <div id="fb-world" class="absolute left-0 top-0" style="width:2200px;height:1500px;transform-origin:0 0">
+                    <svg id="fb-lines" class="absolute inset-0 overflow-visible pointer-events-none" width="2200" height="1500"></svg>
+                    <div id="fb-items" class="absolute inset-0"></div>
+                    <svg id="fb-ink" class="absolute inset-0 overflow-visible" width="2200" height="1500"></svg>
+                  </div>
+                  <div class="absolute bottom-3 left-3 bg-white/90 rounded-lg px-3 py-2 text-xs text-slate-500">拖曳空白處平移 · 滾輪縮放 · 點選卡片後可連線</div>
+                </div>
+                <aside class="!flex !w-auto !relative !border !rounded-2xl !p-4 !bg-white flex-col gap-3">
+                  <h3 class="font-bold text-lg">AI 白板助教</h3>
+                  <p class="text-xs text-slate-500">選取一張卡片或上傳圖片，再輸入想釐清的問題。此版本提供本機互動工具；真正的多模態 AI 回答需在既有模型連線設定中配置 Vision 模型與金鑰。</p>
+                  <textarea id="fb-question" class="w-full border rounded-xl p-3 text-sm" rows="3" placeholder="例如：這個概念是什麼意思？請舉一個製造業例子。"></textarea>
+                  <button class="rounded-xl bg-blue-600 text-white px-4 py-3 font-semibold" onclick="fbAsk()">針對選取內容提問</button>
+                  <div id="fb-answer" class="text-sm rounded-xl bg-slate-50 p-3 min-h-[70px]">助教回覆會顯示在這裡。</div>
+                  <hr><h3 class="font-bold">互動小考</h3>
+                  <p id="fb-quiz-prompt" class="text-sm">從白板知識卡產生填空練習。</p>
+                  <input id="fb-quiz-answer" class="border rounded-lg p-2 w-full" placeholder="輸入答案">
+                  <button class="rounded-lg border px-3 py-2" onclick="fbQuiz()">出題／檢查答案</button>
+                  <div id="fb-quiz-result" class="text-sm"></div>
+                  <div class="text-xs text-slate-500">提示：卡片可拖曳；按住空白區拖曳可平移。白板資料會自動存於此瀏覽器。</div>
+                </aside>
+              </div>
+            </section>
+
+
+                    </div>
+                    <textarea id="md-out" rows="22" class="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-transparent p-2 focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono" placeholder="轉錄結果會顯示在這裡，也可直接貼上文字再按「AI 整理排版」。"></textarea>
+                </div>
+            </section>
+
+            <section id="tab-mentor" class="space-y-4 flex flex-col h-full hidden">
+                <div class="custom-card flex-1 flex flex-col rounded-2xl border border-slate-200 dark:border-slate-700 overflow-hidden h-[calc(100vh-140px)]">
+                    <div class="p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 flex items-center justify-between">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-10 h-10 rounded-full bg-brand-500 text-white flex items-center justify-center font-bold">
+                                <i class="fa-solid fa-robot"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-bold text-sm">智海 AI 智慧導師</h4>
+                                <p class="text-xs text-slate-400" id="mentor-endpoint-desc">連線狀態：就緒</p>
+                                <p class="text-xs text-brand-500" id="mentor-course-desc"></p>
+                            </div>
+                        </div>
+                        <div class="flex items-center space-x-3">
+                            <select id="mentor-scope-select" onchange="setMentorScope(this.value)" class="bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-xs"><option value="course">僅目前課程</option><option value="all">全部教材</option></select>
+                            <select id="mentor-conn-select" onchange="setActiveConn(this.value)" class="max-w-[10rem] bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-xs"></select>
+                            <button onclick="clearChat()" class="text-xs text-slate-500 hover:text-red-500 whitespace-nowrap"><i class="fa-solid fa-trash-can mr-1"></i>清除對話</button>
+                        </div>
+                    </div>
+                    <!-- 對話訊息框 -->
+                    <div id="chat-messages" class="flex-1 p-4 overflow-y-auto space-y-4">
+                        <div class="flex items-start space-x-3">
+                            <div class="w-8 h-8 rounded-full bg-brand-500 text-white flex items-center justify-center text-xs shrink-0"><i class="fa-solid fa-robot"></i></div>
+                            <div class="custom-card p-4 rounded-2xl rounded-tl-none border border-slate-200 dark:border-slate-700 text-sm max-w-lg shadow-sm">
+                                您好！我是您的智海 AI 學習導師。預設使用 Puter AI（免 API Key）；第一次提問時會跳出 Puter 登入視窗，登入後即可開始。也可到右上角「設定」改用其他模型。
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 輸入框 -->
+                    <div class="p-4 border-t border-slate-200 dark:border-slate-700 custom-card flex items-center space-x-2">
+                        <input type="text" id="chat-input" placeholder="輸入您想詢問的問題..." class="flex-1 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-brand-500" onkeypress="handleChatKeyPress(event)">
+                        <button onclick="sendChatMessage()" class="px-5 py-3 bg-brand-500 text-white rounded-xl font-semibold hover:bg-brand-600 transition flex items-center">
+                            <i class="fa-solid fa-paper-plane"></i>
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+        </div>
+    </main>
+
+    <!-- 系統與 LLM 設定 Modal -->
+    <div id="settings-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="custom-card rounded-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 border border-slate-200 dark:border-slate-700 shadow-2xl space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-100 dark:border-slate-700 pb-4">
+                <h3 class="text-lg font-bold"><i class="fa-solid fa-sliders text-brand-500 mr-2"></i>系統與 LLM 設定</h3>
+                <button onclick="closeSettingsModal()" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark text-xl"></i></button>
+            </div>
+
+            <div class="space-y-4">
+                <!-- 佈景主題設定 -->
+                <div>
+                    <label class="block text-sm font-semibold mb-2">介面佈景主題</label>
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        <button onclick="setTheme('theme-blue')" class="p-2 border rounded-xl text-xs font-semibold bg-blue-50 text-blue-600 border-blue-200">極光藍海</button>
+                        <button onclick="setTheme('theme-dark')" class="p-2 border rounded-xl text-xs font-semibold bg-slate-800 text-slate-200 border-slate-700">極客深色</button>
+                        <button onclick="setTheme('theme-morandi')" class="p-2 border rounded-xl text-xs font-semibold bg-[#e9e9e6] text-[#4a4a48]">莫蘭迪灰</button>
+                        <button onclick="setTheme('theme-warm')" class="p-2 border rounded-xl text-xs font-semibold bg-[#faedcd] text-[#603813]">溫馨暖陽</button>
+                    </div>
+                </div>
+
+                <!-- 字體大小設定 -->
+                <div>
+                    <label class="block text-sm font-semibold mb-2">字體大小調整</label>
+                    <div class="flex space-x-2">
+                        <button onclick="setFontSize('font-small')" class="flex-1 py-1.5 border rounded-lg text-xs">小</button>
+                        <button onclick="setFontSize('font-medium')" class="flex-1 py-1.5 border rounded-lg text-sm">標準</button>
+                        <button onclick="setFontSize('font-large')" class="flex-1 py-1.5 border rounded-lg text-base">大</button>
+                    </div>
+                </div>
+
+                <!-- LLM 連線管理 -->
+                <div>
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="text-sm font-semibold">LLM 連線管理</label>
+                        <span class="text-xs text-slate-400">可新增多個，並在導師頁切換</span>
+                    </div>
+                    <div id="conn-list" class="space-y-2 mb-4"></div>
+
+                    <div class="p-4 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
+                        <h4 id="conn-form-title" class="text-sm font-bold">新增連線</h4>
+                        <input type="text" id="conn-name" placeholder="連線名稱，例如：我的 Ollama、公司 LiteLLM" class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm">
+                        <select id="conn-type" onchange="onConnTypeChange()" class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm">
+                            <option value="puter">Puter AI（免 API Key・登入 Puter 帳號即可）</option>
+                            <option value="ollama">Ollama 本地端</option>
+                            <option value="openai">OpenAI / OpenAI 相容 (LM Studio、vLLM、LiteLLM…)</option>
+                            <option value="anthropic">Anthropic Claude</option>
+                            <option value="gemini">Google Gemini</option>
+                        </select>
+                        <input type="text" id="conn-endpoint" placeholder="端點網址，例如 http://127.0.0.1:11434" class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm">
+                        <input type="text" id="conn-model" placeholder="模型名稱 (Model ID)，例如 llama3、gpt-4o" class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm">
+                        <input type="password" id="conn-key" placeholder="API Key (本地端可留空)" autocomplete="off" class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-3 text-sm">
+                        <div class="flex flex-wrap gap-2">
+                            <button onclick="saveConn()" class="px-4 py-2 bg-brand-500 text-white rounded-xl text-xs font-semibold hover:bg-brand-600 transition">儲存連線</button>
+                            <button onclick="testConn()" class="px-4 py-2 border rounded-xl text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition">測試連線</button>
+                            <button onclick="resetConnForm()" class="px-4 py-2 border rounded-xl text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition">清除 / 取消編輯</button>
+                        </div>
+                        <p id="conn-test-result" class="text-xs whitespace-pre-wrap break-words"></p>
+                    </div>
+                </div>
+
+                <!-- 自動生成學習資料 -->
+                <div class="pt-4 border-t border-slate-100 dark:border-slate-700">
+                    <label class="flex items-center text-sm font-semibold cursor-pointer"><input type="checkbox" id="auto-study-toggle" class="mr-2" onchange="setAutoStudy(this.checked)">點擊課程時自動生成摘要／閃卡／測驗</label>
+                    <p class="text-xs text-slate-400 mt-1">每段教材會呼叫 3 次 LLM；使用付費 API 時可關閉，改按「AI 生成學習資料」手動生成。</p>
+                </div>
+
+                <!-- 知識庫儲存位置 -->
+                <div class="pt-4 border-t border-slate-100 dark:border-slate-700">
+                    <label class="block text-sm font-semibold mb-2">知識庫 JSON 儲存位置</label>
+                    <div class="grid grid-cols-2 gap-2 mb-3">
+                        <button id="kb-mode-local" onclick="setStorageMode('local')" class="p-2 border rounded-xl text-xs font-semibold">本地端</button>
+                        <button id="kb-mode-drive" onclick="setStorageMode('drive')" class="p-2 border rounded-xl text-xs font-semibold">Google Drive</button>
+                    </div>
+                    <div id="kb-local-box" class="space-y-2">
+                        <p class="text-xs text-slate-500">資料永遠保存在瀏覽器內。若選擇本機資料夾（Chrome / Edge），每門課程的知識庫會自動寫成 .kb.json 檔案。</p>
+                        <div class="flex flex-wrap gap-2">
+                            <button onclick="pickLocalFolderBtn()" class="px-3 py-2 border rounded-xl text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800">選擇 / 重新授權資料夾</button>
+                            <button onclick="loadKbFromLocalFolder()" class="px-3 py-2 border rounded-xl text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800">從資料夾載入知識庫</button>
+                        </div>
+                        <p id="kb-local-status" class="text-xs text-slate-400 whitespace-pre-wrap"></p>
+                    </div>
+                    <div id="kb-drive-box" class="space-y-2 hidden">
+                        <p class="text-xs text-slate-500">課程知識庫會存成 .kb.json 到你 Drive 的「智海AI知識庫」資料夾。需以 http://localhost 開啟本頁，且該網址已加入 OAuth 用戶端的授權來源。</p>
+                        <div class="flex flex-wrap gap-2">
+                            <button onclick="connectDriveBtn()" class="px-3 py-2 bg-brand-500 text-white rounded-xl text-xs font-semibold hover:bg-brand-600">連線 Google Drive</button>
+                            <button onclick="syncAllBtn()" class="px-3 py-2 border rounded-xl text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800">同步全部課程</button>
+                            <button onclick="loadKbFromDriveBtn()" class="px-3 py-2 border rounded-xl text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800">從 Drive 載入知識庫</button>
+                            <button onclick="disconnectDrive()" class="px-3 py-2 border rounded-xl text-xs font-semibold text-red-500 hover:bg-red-50 dark:hover:bg-slate-800">中斷連線</button>
+                        </div>
+                        <p id="kb-drive-status" class="text-xs text-slate-400 whitespace-pre-wrap"></p>
+                    </div>
+                    <div class="flex flex-wrap gap-2 mt-3">
+                        <button onclick="exportAllKb()" class="px-3 py-2 border rounded-xl text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800"><i class="fa-solid fa-download mr-1"></i>匯出全部知識庫 JSON</button>
+                        <label class="px-3 py-2 border rounded-xl text-xs font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"><i class="fa-solid fa-upload mr-1"></i>匯入知識庫 JSON
+                            <input type="file" accept=".json" multiple class="hidden" onchange="importKbFiles(event)">
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 安裝成 App (PWA) -->
+            <div class="pt-4 border-t border-slate-100 dark:border-slate-700">
+                <label class="block text-sm font-semibold mb-2"><i class="fa-solid fa-mobile-screen-button text-brand-500 mr-2"></i>安裝成 App（電腦／Android／iOS）</label>
+                <button id="pwa-install-btn" onclick="installPwa()" class="hidden px-4 py-2 bg-brand-500 text-white rounded-xl text-xs font-semibold hover:bg-brand-600 transition mb-2"><i class="fa-solid fa-download mr-1"></i>安裝智海 AI</button>
+                <p id="pwa-status" class="text-xs text-slate-500 whitespace-pre-wrap"></p>
+            </div>
+
+            <!-- 請作者喝一杯拿鐵 -->
+            <div class="pt-4 border-t border-slate-100 dark:border-slate-700">
+                <a id="donate-latte-btn" href="https://api.payuni.com.tw/api/uop/receive_info/2/3/U066100352/Gpnnwn6NWW9WIoPhS8YG9" target="_blank" rel="noopener noreferrer"
+                   class="w-full flex items-center justify-center px-4 py-3 rounded-xl text-sm font-semibold bg-amber-400 hover:bg-amber-500 text-amber-950 shadow transition">
+                    <i class="fa-solid fa-mug-hot mr-2"></i>請作者喝一杯拿鐵
+                </a>
+                <p class="text-xs text-slate-400 mt-2 text-center">喜歡智海 AI 嗎？歡迎小額贊助，支持作者持續更新。</p>
+            </div>
+
+            <div class="flex justify-end space-x-3 pt-4 border-t border-slate-100 dark:border-slate-700">
+                <button onclick="closeSettingsModal()" class="px-5 py-2 bg-brand-500 text-white rounded-xl text-sm font-semibold hover:bg-brand-600 transition shadow">完成</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 新增筆記 Modal -->
+    <div id="note-modal" class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden flex items-center justify-center p-4">
+        <div class="custom-card rounded-2xl max-w-lg w-full p-6 border border-slate-200 dark:border-slate-700 shadow-2xl space-y-4">
+            <h3 class="text-lg font-bold">新增學習筆記</h3>
+            <input type="text" id="note-title-input" placeholder="筆記標題..." class="w-full bg-slate-100 dark:bg-slate-800 border rounded-xl p-3 text-sm">
+            <textarea id="note-content-input" placeholder="輸入筆記內容摘要..." rows="4" class="w-full bg-slate-100 dark:bg-slate-800 border rounded-xl p-3 text-sm"></textarea>
+            <div class="flex justify-end space-x-3">
+                <button onclick="closeNoteModal()" class="px-4 py-2 border rounded-xl text-sm">取消</button>
+                <button onclick="saveNote()" class="px-5 py-2 bg-brand-500 text-white rounded-xl text-sm font-semibold">儲存筆記</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript 邏輯核心 -->
+    <script>
+        // 資料狀態初始化
+        let appData = {
+            theme: 'theme-blue',
+            fontSize: 'font-medium',
+            selectedLLM: 'GPT-4o',
+            apiEndpoint: 'https://api.openai.com/v1',
+            apiModel: 'gpt-4o',
+            chunkSize: 6000,
+            connections: [],
+            activeConnId: null,
+            apiKey: '',
+            documents: [],
+            notes: [
+                { id: 1, title: 'Prompt 核心架構筆記', content: '包含角色任務、背景資訊、具體指令與約束條件四個維度，可大幅提升模型精準度。', date: '2026-06-20' },
+                { id: 2, title: 'RAG 知識庫檢索原理', content: '透過向量化與文件切塊（Chunking），讓 LLM 能夠結合外部私有文件進行準確回答。', date: '2026-06-21' }
+            ],
+            courses: [],
+            activeCourseId: null,
+            storageMode: 'local',
+            driveAuthorized: false,
+            driveFolderId: null,
+            mentorScope: 'course',
+            quizResults: [],
+            autoStudy: true
+        };
+
+        // 載入 localStorage
+        window.addEventListener('DOMContentLoaded', () => {
+            const saved = localStorage.getItem('zhihai_ai_app_data');
+            if (saved) {
+                try { appData = Object.assign({}, appData, JSON.parse(saved)); } catch (e) { console.error(e); }
+            }
+            migrateConnections();
+            migrateCourses();
+            applySettings();
+            resetConnForm();
+            renderKbSettings();
+            loadLocalDirHandle();
+            if (appData.storageMode === 'drive') loadScript(GIS_URL).catch(() => {});
+            renderDocuments();
+            renderNotes();
+            renderCourses('all');
+            updateDashboardStats();
+        });
+
+        // 儲存至 localStorage
+        function persistData() {
+            localStorage.setItem('zhihai_ai_app_data', JSON.stringify(appData));
+        }
+
+        // 分頁切換
+        function switchTab(tabId) {
+            if (tabId === 'slides') { if (!deck && appData.deck) deck = appData.deck; slRender(true); }
+            const tabs = ['dashboard', 'courses', 'documents', 'notes', 'flash', 'quiz', 'board', 'mentor', 'slides', 'mdtool'];
+            tabs.forEach(t => {
+                const el = document.getElementById(`tab-${t}`);
+                const nav = document.getElementById(`nav-${t}`);
+                if (t === tabId) {
+                    el.classList.remove('hidden');
+                    if (nav) {
+                        nav.className = "w-full flex items-center px-4 py-3 rounded-xl text-left font-medium transition-colors bg-brand-500 text-white shadow-sm";
+                    }
+                } else {
+                    el.classList.add('hidden');
+                    if (nav) {
+                        nav.className = "w-full flex items-center px-4 py-3 rounded-xl text-left font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors";
+                    }
+                }
+            });
+            const titles = {
+                dashboard: '學習儀表板',
+                courses: '課程學習區',
+                documents: '文件匯入中心',
+                notes: 'AI 筆記摘要',
+                flash: 'AI 閃卡',
+                quiz: '互動測驗',
+                board: 'FlomiAI 視覺化互動白板',
+                mentor: 'AI 導師問答'
+            };
+            document.getElementById('page-title').innerText = titles[tabId];
+            if (['notes', 'flash', 'quiz'].includes(tabId)) { renderStudyTabs(); maybeAutoStudy(); }
+            if (tabId === 'mentor') renderMentorHeader();
+            if (tabId === 'courses') renderCourses();
+        }
+
+        // 行動版側邊欄切換
+        function toggleMobileMenu() {
+            const aside = document.querySelector('aside');
+            aside.classList.toggle('hidden');
+            aside.classList.toggle('absolute');
+            aside.classList.toggle('z-50');
+            aside.classList.toggle('h-full');
+        }
+
+        // 設定互動
+        function openSettingsModal() { document.getElementById('settings-modal').classList.remove('hidden'); const t = document.getElementById('auto-study-toggle'); if (t) t.checked = appData.autoStudy !== false; }
+        function closeSettingsModal() { document.getElementById('settings-modal').classList.add('hidden'); }
+
+        function setTheme(theme) {
+            appData.theme = theme;
+            applySettings();
+            persistData();
+        }
+
+        function setFontSize(size) {
+            appData.fontSize = size;
+            applySettings();
+            persistData();
+        }
+
+        function applySettings() {
+            document.body.className = `${appData.theme} ${appData.fontSize} flex h-screen overflow-hidden`;
+            renderConnections();
+        }
+
+        function escapeHtml(str) {
+            return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+        }
+
+        // ===== 多組 LLM 連線管理 =====
+        const PUTER_JS_URL = 'https://js.puter.com/v2/';
+        const PROVIDER_TYPES = {
+            puter:     { label: 'Puter AI（免 API Key）', endpoint: PUTER_JS_URL,                         model: 'gpt-5.4-nano' },
+            openai:    { label: 'OpenAI / 相容',    endpoint: 'https://api.openai.com/v1',                 model: 'gpt-4o' },
+            anthropic: { label: 'Anthropic Claude', endpoint: 'https://api.anthropic.com',                 model: 'claude-sonnet-4-6' },
+            gemini:    { label: 'Google Gemini',    endpoint: 'https://generativelanguage.googleapis.com', model: 'gemini-2.5-flash' },
+            ollama:    { label: 'Ollama 本地端',    endpoint: 'http://127.0.0.1:11434',                    model: 'llama3' }
+        };
+        let editingConnId = null;
+
+        function newConnId() { return 'c_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+        // 舊版單一設定 → 轉成連線清單
+        function migrateConnections() {
+            if (!Array.isArray(appData.connections)) appData.connections = [];
+            if (appData.connections.length === 0 && (appData.apiKey || /^Ollama/.test(appData.selectedLLM || ''))) {
+                const old = appData.selectedLLM || '';
+                const type = old.startsWith('Ollama') ? 'ollama'
+                           : old.startsWith('Claude') ? 'anthropic'
+                           : old.startsWith('Gemini') ? 'gemini' : 'openai';
+                appData.connections.push({
+                    id: newConnId(),
+                    name: old || PROVIDER_TYPES[type].label,
+                    type,
+                    endpoint: appData.apiEndpoint || PROVIDER_TYPES[type].endpoint,
+                    model: appData.apiModel || PROVIDER_TYPES[type].model,
+                    apiKey: appData.apiKey || ''
+                });
+            }
+            // 預設連線：Puter AI（只在第一次植入；若使用者目前沒有可用連線，就設為使用中）
+            if (!appData.puterSeeded) {
+                appData.puterSeeded = true;
+                if (!appData.connections.some(c => c.type === 'puter')) {
+                    appData.connections.unshift({ id: 'c_puter_default', name: 'Puter AI（預設・免 API Key）', type: 'puter', endpoint: PUTER_JS_URL, model: PROVIDER_TYPES.puter.model, apiKey: '' });
+                }
+                const act = appData.connections.find(c => c.id === appData.activeConnId);
+                const local = x => /localhost|127\.0\.0\.1/.test(x.endpoint || '');
+                const unusable = !act || (['openai', 'anthropic', 'gemini'].includes(act.type) && !act.apiKey && !local(act));
+                if (unusable) appData.activeConnId = 'c_puter_default';
+            }
+            if (!appData.connections.some(c => c.id === appData.activeConnId)) {
+                appData.activeConnId = appData.connections.length ? appData.connections[0].id : null;
+            }
+        }
+
+        function getActiveConn() {
+            return (appData.connections || []).find(c => c.id === appData.activeConnId) || null;
+        }
+
+        function setActiveConn(id) {
+            appData.activeConnId = id;
+            persistData();
+            renderConnections();
+        }
+
+        function renderConnections() {
+            const conns = appData.connections || [];
+            const active = getActiveConn();
+
+            // 儀表板標籤與導師頁說明
+            document.getElementById('current-llm-badge').innerText = active ? active.name : '尚未設定';
+            document.getElementById('mentor-endpoint-desc').innerText = active
+                ? `連線至：${active.name}（${PROVIDER_TYPES[active.type].label}・${active.model}）`
+                : '尚未設定連線，請至設定新增';
+
+            // 導師頁切換下拉
+            const sel = document.getElementById('mentor-conn-select');
+            sel.innerHTML = conns.length
+                ? conns.map(c => `<option value="${c.id}" ${c.id === appData.activeConnId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')
+                : '<option value="">（無連線）</option>';
+
+            // 設定視窗清單
+            const list = document.getElementById('conn-list');
+            if (!conns.length) {
+                list.innerHTML = '<p class="text-xs text-slate-400 text-center py-3">尚無連線，請在下方新增。</p>';
+                return;
+            }
+            list.innerHTML = conns.map(c => {
+                const isActive = c.id === appData.activeConnId;
+                return `
+                <div class="flex items-center justify-between p-3 rounded-xl border ${isActive ? 'border-brand-500 bg-brand-50/50 dark:bg-slate-800/50' : 'border-slate-200 dark:border-slate-700'}">
+                    <div class="min-w-0 mr-2">
+                        <div class="text-sm font-bold truncate">${escapeHtml(c.name)} ${isActive ? '<span class="text-xs font-semibold text-brand-500 ml-1">使用中</span>' : ''}</div>
+                        <div class="text-xs text-slate-400 truncate">${PROVIDER_TYPES[c.type].label}・${escapeHtml(c.model)}・${c.type === 'puter' ? '登入 Puter 帳號即可使用' : (c.apiKey ? '已設定金鑰' : '無金鑰')}</div>
+                        <div class="text-xs text-slate-400 truncate">${escapeHtml(c.endpoint)}</div>
+                    </div>
+                    <div class="flex items-center space-x-1 shrink-0">
+                        ${isActive ? '' : `<button onclick="setActiveConn('${c.id}')" class="px-2 py-1 text-xs border rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">使用</button>`}
+                        <button onclick="editConn('${c.id}')" class="px-2 py-1 text-xs border rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700">編輯</button>
+                        <button onclick="deleteConn('${c.id}')" class="px-2 py-1 text-xs border rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-slate-700">刪除</button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function onConnTypeChange() {
+            const d = PROVIDER_TYPES[document.getElementById('conn-type').value];
+            document.getElementById('conn-endpoint').value = d.endpoint;
+            document.getElementById('conn-model').value = d.model;
+            if (document.getElementById('conn-type').value === 'puter') document.getElementById('conn-test-result').innerText = 'Puter AI 不需要 API Key。按「測試連線」會跳出 Puter 登入視窗，登入後即可使用（每位使用者有免費月額度，用量計在自己的 Puter 帳號）。請允許瀏覽器彈出視窗。';
+        }
+
+        function readConnForm() {
+            return {
+                name: document.getElementById('conn-name').value.trim(),
+                type: document.getElementById('conn-type').value,
+                endpoint: document.getElementById('conn-endpoint').value.trim().replace(/\/+$/, ''),
+                model: document.getElementById('conn-model').value.trim(),
+                apiKey: document.getElementById('conn-key').value.trim()
+            };
+        }
+
+        function resetConnForm() {
+            editingConnId = null;
+            document.getElementById('conn-form-title').innerText = '新增連線';
+            document.getElementById('conn-name').value = '';
+            document.getElementById('conn-type').value = 'ollama';
+            document.getElementById('conn-key').value = '';
+            document.getElementById('conn-test-result').innerText = '';
+            onConnTypeChange();
+        }
+
+        function editConn(id) {
+            const c = appData.connections.find(x => x.id === id);
+            if (!c) return;
+            editingConnId = id;
+            document.getElementById('conn-form-title').innerText = `編輯連線：${c.name}`;
+            document.getElementById('conn-name').value = c.name;
+            document.getElementById('conn-type').value = c.type;
+            document.getElementById('conn-endpoint').value = c.endpoint;
+            document.getElementById('conn-model').value = c.model;
+            document.getElementById('conn-key').value = c.apiKey || '';
+            document.getElementById('conn-test-result').innerText = '';
+        }
+
+        function saveConn() {
+            const f = readConnForm();
+            if (!f.name || !f.endpoint || !f.model) { alert('請填寫連線名稱、端點網址與模型名稱。'); return; }
+            if (!/^https?:\/\//i.test(f.endpoint)) { alert('端點網址需以 http:// 或 https:// 開頭。'); return; }
+            if (f.apiKey && /[^\x21-\x7E]/.test(f.apiKey)) { alert('API Key 含有不合法字元（全形字、空白或換行），請重新貼上。'); return; }
+            if (editingConnId) {
+                const i = appData.connections.findIndex(x => x.id === editingConnId);
+                if (i >= 0) appData.connections[i] = { ...appData.connections[i], ...f };
+            } else {
+                const c = { id: newConnId(), ...f };
+                appData.connections.push(c);
+                appData.activeConnId = c.id;   // 新增後直接切換使用
+            }
+            persistData();
+            renderConnections();
+            resetConnForm();
+        }
+
+        function deleteConn(id) {
+            const c = appData.connections.find(x => x.id === id);
+            if (!c || !confirm(`確定刪除連線「${c.name}」？`)) return;
+            appData.connections = appData.connections.filter(x => x.id !== id);
+            if (appData.activeConnId === id) appData.activeConnId = appData.connections.length ? appData.connections[0].id : null;
+            if (editingConnId === id) resetConnForm();
+            persistData();
+            renderConnections();
+        }
+
+        async function testConn() {
+            const f = readConnForm();
+            const out = document.getElementById('conn-test-result');
+            if (!f.endpoint || !f.model) { out.innerText = '請先填寫端點網址與模型名稱。'; return; }
+            out.innerText = '測試中…';
+            try {
+                const reply = await callLLM([{ role: 'user', content: '請只回覆「連線成功」四個字。' }], { id: 'test', ...f }, { skipDocs: true });
+                out.innerText = '✅ 連線成功。模型回覆：' + reply.slice(0, 80);
+            } catch (err) {
+                out.innerText = '❌ ' + (err instanceof TypeError
+                    ? `瀏覽器無法連到端點（${err.message}）。請檢查網址、伺服器是否執行，以及 CORS 設定。`
+                    : err.message);
+            }
+        }
+
+        // ===== 文件解析 (PDF / DOCX / XLSX / PPTX / 文字檔) =====
+        const LIB_URLS = {
+            pdf:    'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js',
+            pdfWorker: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
+            mammoth:'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js',
+            xlsx:   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+            jszip:  'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+        };
+        const TEXT_TYPES = ['TXT', 'MD', 'CSV', 'JSON'];
+        const MAX_DOC_CHARS = 150000;
+        const loadedLibs = {};
+        let pdfWorkerUrl = null;
+
+        function toast(msg, ms = 4000) {
+            let t = document.getElementById('toast');
+            if (!t) {
+                t = document.createElement('div');
+                t.id = 'toast';
+                t.className = 'fixed bottom-4 right-4 z-[60] max-w-sm px-4 py-3 rounded-xl bg-slate-800 text-white text-sm shadow-lg whitespace-pre-wrap';
+                document.body.appendChild(t);
+            }
+            t.textContent = msg;
+            t.style.display = 'block';
+            clearTimeout(t._h);
+            if (ms) t._h = setTimeout(() => { t.style.display = 'none'; }, ms);
+        }
+
+        function loadScript(url) {
+            if (loadedLibs[url]) return loadedLibs[url];
+            loadedLibs[url] = new Promise((resolve, reject) => {
+                const el = document.createElement('script');
+                el.src = url;
+                el.onload = resolve;
+                el.onerror = () => { delete loadedLibs[url]; reject(new Error('無法載入解析套件，請確認網路可連線至 cdnjs.cloudflare.com')); };
+                document.head.appendChild(el);
+            });
+            return loadedLibs[url];
+        }
+
+        async function extractPdf(buf) {
+            await loadScript(LIB_URLS.pdf);
+            const lib = window.pdfjsLib;
+            if (!pdfWorkerUrl) {
+                // file:// 開啟時瀏覽器不允許直接載入跨來源 Worker，改用 Blob 包裝
+                try {
+                    const code = await (await fetch(LIB_URLS.pdfWorker)).text();
+                    pdfWorkerUrl = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+                } catch (e) { pdfWorkerUrl = LIB_URLS.pdfWorker; }
+            }
+            lib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
+            const pdf = await lib.getDocument({ data: new Uint8Array(buf) }).promise;
+            const pages = [];
+            for (let p = 1; p <= pdf.numPages; p++) {
+                const page = await pdf.getPage(p);
+                const tc = await page.getTextContent();
+                const lines = [];
+                let line = '', lastY = null;
+                for (const it of tc.items) {
+                    const y = it.transform ? it.transform[5] : 0;
+                    if (lastY !== null && Math.abs(y - lastY) > 2) { lines.push(line); line = ''; }
+                    line += it.str;
+                    lastY = y;
+                }
+                if (line) lines.push(line);
+                pages.push(`[第${p}頁]\n` + lines.join('\n'));
+            }
+            return { text: pages.join('\n\n'), pages: pdf.numPages };
+        }
+
+        async function extractDocx(buf) {
+            await loadScript(LIB_URLS.mammoth);
+            const r = await window.mammoth.extractRawText({ arrayBuffer: buf });
+            return { text: r.value };
+        }
+
+        async function extractXlsx(buf) {
+            await loadScript(LIB_URLS.xlsx);
+            const wb = window.XLSX.read(buf, { type: 'array' });
+            return { text: wb.SheetNames.map(n => `[工作表：${n}]\n` + window.XLSX.utils.sheet_to_csv(wb.Sheets[n])).join('\n\n') };
+        }
+
+        async function extractPptx(buf) {
+            await loadScript(LIB_URLS.jszip);
+            const zip = await window.JSZip.loadAsync(buf);
+            const num = n => parseInt(n.match(/slide(\d+)\.xml$/)[1], 10);
+            const names = Object.keys(zip.files).filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n)).sort((x, y) => num(x) - num(y));
+            const dec = t => t.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+            const out = [];
+            for (const n of names) {
+                const xml = await zip.file(n).async('string');
+                const text = xml.split('</a:p>')
+                    .map(par => [...par.matchAll(/<a:t[^>]*>([^<]*)<\/a:t>/g)].map(m => dec(m[1])).join(''))
+                    .filter(Boolean).join('\n');
+                out.push(`[投影片${num(n)}]\n${text}`);
+            }
+            return { text: out.join('\n\n'), pages: names.length };
+        }
+
+        async function extractText(file, type) {
+            if (TEXT_TYPES.includes(type)) return { text: await file.text() };
+            const buf = await file.arrayBuffer();
+            if (type === 'PDF') return extractPdf(buf);
+            if (type === 'DOCX') return extractDocx(buf);
+            if (type === 'XLSX') return extractXlsx(buf);
+            if (type === 'PPTX') return extractPptx(buf);
+            throw new Error('不支援的檔案格式');
+        }
+
+        async function handleDocumentUpload(event) {
+            const files = Array.from(event.target.files);
+            event.target.value = '';
+            let ok = 0, fail = 0, dup = 0;
+            const newCourses = [];
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                const type = file.name.split('.').pop().toUpperCase();
+                const sizeStr = (file.size / 1024).toFixed(1) + ' KB';
+                if (appData.documents.some(d => d.content && d.name === file.name && d.size === sizeStr)) { dup++; continue; }
+                toast(`正在解析 (${i + 1}/${files.length})：${file.name}`, 0);
+                const doc = {
+                    id: Date.now() + Math.random(),
+                    name: file.name,
+                    size: (file.size / 1024).toFixed(1) + ' KB',
+                    type, content: '', chars: 0, parseNote: '', study: {},
+                    date: new Date().toISOString().split('T')[0]
+                };
+                try {
+                    const r = await extractText(file, type);
+                    const text = (r.text || '').replace(/\r\n/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+                    const bare = text.replace(/\[(第\d+頁|投影片\d+)\]/g, '').replace(/\s+/g, '');
+                    if (bare.length < 30) {
+                        doc.parseNote = type === 'PDF' ? '此 PDF 沒有可擷取的文字（可能是掃描圖片檔），目前不支援 OCR。' : '檔案中沒有可擷取的文字。';
+                        fail++;
+                    } else {
+                        doc.content = text.slice(0, MAX_DOC_CHARS);
+                        doc.chars = text.length;
+                        if (text.length > MAX_DOC_CHARS) doc.parseNote = `內容過長，僅保留前 ${MAX_DOC_CHARS} 字。`;
+                        ok++;
+                    }
+                } catch (err) {
+                    doc.parseNote = '解析失敗：' + err.message;
+                    fail++;
+                }
+                appData.documents.push(doc);
+                if (doc.content) newCourses.push(createCourseFromDoc(doc));
+            }
+            try { persistData(); } catch (e) { toast('瀏覽器儲存空間不足，部分文件內容可能未保存。請刪除不需要的文件。', 8000); }
+            renderDocuments();
+            renderCourses();
+            updateDashboardStats();
+            toast(`匯入完成：${ok} 份成功解析並建立課程` + (fail ? `，${fail} 份有問題（詳見文件列表）` : '') + (dup ? `，略過 ${dup} 份重複檔案` : '') + '。', 6000);
+            for (const c of newCourses) await syncCourseKb(c, { manual: false });
+            if (ok > 0) switchTab('courses');
+        }
+
+        function renderDocuments() {
+            const container = document.getElementById('document-list');
+            if (appData.documents.length === 0) {
+                container.innerHTML = `<p class="text-sm text-slate-400 text-center py-4">目前尚無上傳文件，請點擊上方區域新增。</p>`;
+                return;
+            }
+            container.innerHTML = appData.documents.map(doc => {
+                const hasText = !!doc.content;
+                const studied = doc.study && Object.keys(doc.study).length > 0;
+                const note = doc.parseNote
+                    ? `<div class="text-xs ${hasText ? 'text-amber-600' : 'text-red-500'} mt-1">${escapeHtml(doc.parseNote)}</div>`
+                    : (!hasText ? '<div class="text-xs text-red-500 mt-1">舊紀錄僅有檔名，請刪除後重新上傳以解析內容。</div>' : '');
+                return `
+                <div class="flex items-center justify-between p-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                    <div class="flex items-center space-x-3 min-w-0">
+                        <i class="fa-solid fa-file-lines text-blue-500 text-xl"></i>
+                        <div class="min-w-0">
+                            <h4 class="font-bold text-sm truncate">${escapeHtml(doc.name)}</h4>
+                            <span class="text-xs text-slate-400">${doc.type} • ${doc.size} • ${hasText ? doc.chars + ' 字' : '無可讀文字'}${studied ? ' • 已生成學習資料' : ''} • ${doc.date}</span>
+                            ${note}
+                        </div>
+                    </div>
+                    <div class="flex items-center space-x-2 shrink-0 ml-2">
+                        ${hasText && doc.courseId ? `<button onclick="openCourse('${doc.courseId}')" class="px-3 py-1.5 bg-brand-500 text-white rounded-lg text-xs font-semibold hover:bg-brand-600 transition">開啟課程</button>` : ''}
+                        <button onclick="deleteDocument('${doc.id}')" class="text-slate-400 hover:text-red-500 transition"><i class="fa-solid fa-trash"></i></button>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function deleteDocument(id) {
+            const doc = appData.documents.find(d => d.id == id);
+            if (!doc) return;
+            if (!confirm(`刪除「${doc.name}」會一併刪除對應課程、閃卡、測驗與該課程的筆記。\n（已同步到 Google Drive 的 JSON 檔不會被刪除。）\n確定刪除？`)) return;
+            const course = (appData.courses || []).find(c => c.docId == id);
+            if (course) {
+                appData.notes = appData.notes.filter(n => n.courseId !== course.id);
+                appData.courses = appData.courses.filter(c => c.id !== course.id);
+                if (appData.activeCourseId === course.id) { appData.activeCourseId = appData.courses.length ? appData.courses[0].id : null; chatHistory = []; }
+            }
+            appData.documents = appData.documents.filter(d => d.id != id);
+            persistData();
+            renderDocuments(); renderCourses(); renderNotes(); renderStudyTabs(); renderMentorHeader();
+            updateDashboardStats();
+        }
+
+        function updateDashboardStats() {
+            const el = id => document.getElementById(id);
+            const sub = t => `<span class="text-sm font-normal text-slate-400">${t}</span>`;
+            const cs = appData.courses || [];
+            el('dash-doc-count').innerHTML = `${appData.documents.length} ${sub('份')}`;
+            el('dash-course-count').innerHTML = `${cs.length} ${sub('門')}`;
+            el('dash-done-count').innerHTML = `${cs.filter(c => courseProgress(c) >= 100).length} ${sub('/ ' + cs.length + ' 門')}`;
+            const r = appData.quizResults || [];
+            const avg = r.length ? Math.round(r.reduce((a, x) => a + x.score / x.total * 100, 0) / r.length) : null;
+            el('dash-avg-score').innerHTML = `${avg === null ? '—' : avg} ${sub('分')}`;
+        }
+
+        // 筆記功能
+        function openNoteModal() { document.getElementById('note-modal').classList.remove('hidden'); }
+        function closeNoteModal() { document.getElementById('note-modal').classList.add('hidden'); }
+
+        function saveNote() {
+            const title = document.getElementById('note-title-input').value;
+            const content = document.getElementById('note-content-input').value;
+            if (!title || !content) { alert('請填寫完整標題與內容'); return; }
+            appData.notes.push({ id: Date.now(), title, content, courseId: appData.activeCourseId || null, date: new Date().toISOString().split('T')[0] });
+            persistData();
+            renderNotes();
+            closeNoteModal();
+            document.getElementById('note-title-input').value = '';
+            document.getElementById('note-content-input').value = '';
+        }
+
+        function renderNotes() {
+            const grid = document.getElementById('notes-grid');
+            const list = notesForView();
+            if (!list.length) {
+                grid.innerHTML = '<p class="text-sm text-slate-400">這門課程尚無筆記。可按「新增筆記」，或在摘要區按「存為筆記」。</p>';
+                return;
+            }
+            grid.innerHTML = list.map(n => `
+                <div class="custom-card p-6 rounded-2xl border border-slate-200 dark:border-slate-700 relative shadow-sm flex flex-col justify-between">
+                    <div>
+                        <div class="flex justify-between items-center mb-3">
+                            <h3 class="font-bold text-base">${escapeHtml(n.title)}</h3>
+                            <button onclick="deleteNote(${n.id})" class="text-slate-400 hover:text-red-500"><i class="fa-solid fa-trash text-xs"></i></button>
+                        </div>
+                        <p class="text-sm text-slate-600 dark:text-slate-300 mt-2">${escapeHtml(n.content)}</p>
+                    </div>
+                    <span class="text-xs text-slate-400 mt-6 block">${n.date}</span>
+                </div>
+            `).join('');
+        }
+
+        function deleteNote(id) {
+            appData.notes = appData.notes.filter(n => n.id !== id);
+            persistData();
+            renderNotes();
+        }
+
+        // AI 導師對話
+        function handleChatKeyPress(e) { if (e.key === 'Enter') sendChatMessage(); }
+
+        // ===== 課程 (由匯入文件自動建立) =====
+        const TYPE_GROUP = { PDF: 'doc', DOCX: 'doc', TXT: 'doc', MD: 'doc', CSV: 'doc', JSON: 'doc', XLSX: 'sheet', PPTX: 'slides' };
+        const GROUP_LABEL = { doc: '文件', slides: '簡報', sheet: '試算表' };
+        let currentCourseFilter = 'all';
+        let studyChunk = 0, studyBusy = false, studyStatusText = '';
+        let flashIdx = 0, flashFlip = false, quizIdx = 0, quizScore = 0, quizPicked = null, quizRecorded = false;
+
+        function savePersist() {
+            try { persistData(); } catch (e) { toast('瀏覽器儲存空間不足，部分資料可能未保存。請刪除不需要的課程或匯出備份。', 8000); }
+        }
+        function getCourse(id) { return (appData.courses || []).find(c => c.id === id) || null; }
+        function getCourseDoc(c) { return c ? (appData.documents.find(d => String(d.id) === String(c.docId)) || null) : null; }
+        function activeCourse() { return getCourse(appData.activeCourseId); }
+        function activeDoc() { return getCourseDoc(activeCourse()); }
+        function notesForView() { const c = activeCourse(); return c ? appData.notes.filter(n => n.courseId === c.id) : appData.notes; }
+        function scopedDocs() {
+            const c = activeCourse();
+            if (c && (appData.mentorScope || 'course') === 'course') { const d = getCourseDoc(c); return d && d.content ? [d] : []; }
+            return appData.documents.filter(d => d.content);
+        }
+
+        function createCourseFromDoc(doc) {
+            const c = {
+                id: 'cr_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+                docId: doc.id,
+                title: doc.name.replace(/\.[^.]+$/, ''),
+                category: TYPE_GROUP[doc.type] || 'doc',
+                createdAt: Date.now(),
+                kb: { local: { via: 'browser', savedAt: Date.now() }, drive: null }
+            };
+            if (!Array.isArray(appData.courses)) appData.courses = [];
+            appData.courses.push(c);
+            doc.courseId = c.id;
+            if (!appData.activeCourseId) appData.activeCourseId = c.id;
+            return c;
+        }
+
+        // 舊資料轉換：移除示範課程，並為已有內容的文件補建課程
+        function migrateCourses() {
+            if (!Array.isArray(appData.courses)) appData.courses = [];
+            appData.courses = appData.courses.filter(c => c && c.docId && appData.documents.some(d => String(d.id) === String(c.docId)));
+            appData.courses.forEach(c => { if (!c.kb) c.kb = { local: { via: 'browser', savedAt: Date.now() }, drive: null }; });
+            appData.documents.forEach(d => {
+                const c = appData.courses.find(x => String(x.docId) === String(d.id));
+                if (c) d.courseId = c.id;
+                else if (d.content) createCourseFromDoc(d);
+            });
+            if (!getCourse(appData.activeCourseId)) appData.activeCourseId = appData.courses.length ? appData.courses[0].id : null;
+        }
+
+        function courseProgress(c) {
+            const doc = getCourseDoc(c);
+            if (!doc || !doc.content) return 0;
+            const size = appData.chunkSize || 6000;
+            const n = chunkText(doc.content, size).length;
+            let done = 0;
+            for (let i = 0; i < n; i++) if (doc.study && doc.study[size + '-' + i]) done++;
+            return Math.round(done / n * 100);
+        }
+
+        function kbBadge(c) {
+            const parts = [];
+            const l = c.kb && c.kb.local;
+            if (l) parts.push(l.via === 'folder' ? '本機資料夾 ✓' : '瀏覽器本機 ✓');
+            if (appData.storageMode === 'drive' || (c.kb && c.kb.drive)) parts.push(c.kb && c.kb.drive ? 'Drive ✓' : 'Drive 未同步');
+            return parts.join('・');
+        }
+
+        function renderCourses(filter) {
+            if (filter) currentCourseFilter = filter;
+            const all = appData.courses || [];
+            if (currentCourseFilter !== 'all' && !all.some(c => c.category === currentCourseFilter)) currentCourseFilter = 'all';
+            const f = currentCourseFilter;
+            const opts = [['all', '全部']].concat(Object.keys(GROUP_LABEL).filter(g => all.some(c => c.category === g)).map(g => [g, GROUP_LABEL[g]]));
+            document.getElementById('course-filters').innerHTML = opts.map(([k, l]) =>
+                `<button onclick="renderCourses('${k}')" class="px-4 py-1.5 rounded-lg text-sm font-medium ${f === k ? 'bg-brand-500 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'}">${l}</button>`).join('');
+            const grid = document.getElementById('course-grid');
+            const list = f === 'all' ? all : all.filter(c => c.category === f);
+            if (!list.length) {
+                grid.innerHTML = `<div class="md:col-span-3 custom-card p-8 rounded-2xl border border-dashed border-slate-300 dark:border-slate-600 text-center">
+                    <p class="text-sm text-slate-500 mb-3">尚無課程。到「文件匯入中心」匯入 PDF / Word / PPT / Excel / TXT / MD，系統會自動建立課程。</p>
+                    <button onclick="switchTab('documents')" class="px-4 py-2 bg-brand-500 text-white rounded-xl text-sm font-semibold">前往匯入文件</button></div>`;
+                return;
+            }
+            const sm = 'px-2 py-1.5 rounded-lg text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-brand-500 hover:text-white transition';
+            grid.innerHTML = list.map(c => {
+                const doc = getCourseDoc(c);
+                const prog = courseProgress(c);
+                const isActive = c.id === appData.activeCourseId;
+                return `
+                <div class="custom-card p-6 rounded-2xl border ${isActive ? 'border-brand-500 ring-1 ring-brand-500' : 'border-slate-200 dark:border-slate-700'} flex flex-col justify-between shadow-sm">
+                    <div class="cursor-pointer" onclick="openCourse('${c.id}')">
+                        <div class="flex justify-between items-center mb-3">
+                            <span class="text-xs px-2.5 py-1 rounded-full bg-blue-50 dark:bg-blue-900/30 text-blue-600 font-semibold">${GROUP_LABEL[c.category] || '文件'}${doc ? '・' + doc.type : ''}</span>
+                            <span class="text-xs text-slate-400 font-medium">${prog}% 完成</span>
+                        </div>
+                        <h3 class="font-bold text-lg mb-2 break-words">${escapeHtml(c.title)}${isActive ? ' <span class="text-xs font-semibold text-brand-500">使用中</span>' : ''}</h3>
+                        <p class="text-xs text-slate-500 dark:text-slate-400">${doc ? doc.chars + ' 字・' : ''}知識庫：${kbBadge(c)}</p>
+                    </div>
+                    <div class="mt-4">
+                        <div class="w-full bg-slate-100 dark:bg-slate-700 h-2 rounded-full overflow-hidden mb-4"><div class="bg-brand-500 h-full rounded-full" style="width: ${prog}%"></div></div>
+                        <div class="grid grid-cols-4 gap-2 mb-3">
+                            <button onclick="openCourse('${c.id}','notes')" class="${sm}">筆記</button>
+                            <button onclick="openCourse('${c.id}','flash')" class="${sm}">閃卡</button>
+                            <button onclick="openCourse('${c.id}','quiz')" class="${sm}">測驗</button>
+                            <button onclick="openCourse('${c.id}','mentor')" class="${sm}">導師</button>
+                        </div>
+                        <div class="flex items-center justify-between text-xs">
+                            <button onclick="syncCourseBtn('${c.id}')" class="text-brand-500 hover:underline">同步知識庫</button>
+                            <button onclick="downloadKb('${c.id}')" class="text-slate-500 hover:underline">下載 JSON</button>
+                            <button onclick="deleteCourse('${c.id}')" class="text-red-500 hover:underline">刪除</button>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+        function selectCourse(id, silent) {
+            if (appData.activeCourseId !== id) {
+                appData.activeCourseId = id;
+                studyChunk = 0; studyStatusText = '';
+                resetStudyView();
+                clearChat();
+                savePersist();
+            }
+            renderCourses(); renderNotes();
+            if (!silent) { renderStudyTabs(); renderMentorHeader(); maybeAutoStudy(); }
+        }
+        function openCourse(id, tab) { selectCourse(id, true); switchTab(tab || 'notes'); }
+        function deleteCourse(id) { const c = getCourse(id); if (c) deleteDocument(c.docId); }
+
+        function setMentorScope(v) { appData.mentorScope = v; savePersist(); renderMentorHeader(); }
+        function renderMentorHeader() {
+            const c = activeCourse();
+            const scope = appData.mentorScope || 'course';
+            const el = document.getElementById('mentor-course-desc');
+            el.textContent = c
+                ? (scope === 'course' ? `課程：${c.title}` : `課程：${c.title}（檢索範圍：全部教材）`)
+                : (appData.documents.some(d => d.content) ? '未選擇課程，使用全部教材' : '尚無教材，請先匯入文件');
+            document.getElementById('mentor-scope-select').value = scope;
+        }
+
+        // ===== 筆記 / 閃卡 / 測驗 (依目前課程) =====
+        function studyKey() { return `${appData.chunkSize || 6000}-${studyChunk}`; }
+        function studyData() { const d = activeDoc(); return d && d.study ? (d.study[studyKey()] || null) : null; }
+        function resetStudyView() { flashIdx = 0; flashFlip = false; quizIdx = 0; quizScore = 0; quizPicked = null; quizRecorded = false; }
+        function changeStudyChunk(v) { studyChunk = parseInt(v, 10) || 0; studyStatusText = ''; resetStudyView(); renderStudyTabs(); maybeAutoStudy(); }
+        function changeChunkSize(v) { appData.chunkSize = parseInt(v, 10) || 6000; studyChunk = 0; studyStatusText = ''; resetStudyView(); savePersist(); renderStudyTabs(); renderCourses(); maybeAutoStudy(); }
+        function setStudyStatus(msg) { studyStatusText = msg; document.querySelectorAll('.study-status').forEach(el => { el.textContent = msg; }); }
+
+        function emptyCoursesHtml() {
+            return `<div class="custom-card p-8 rounded-2xl border border-dashed border-slate-300 dark:border-slate-600 text-center">
+                <p class="text-sm text-slate-500 mb-3">還沒有課程。請先匯入教材文件，系統會自動建立課程。</p>
+                <button onclick="switchTab('documents')" class="px-4 py-2 bg-brand-500 text-white rounded-xl text-sm font-semibold">前往匯入文件</button></div>`;
+        }
+        function emptyStudyHtml() {
+            return `<div class="custom-card p-8 rounded-2xl border border-slate-200 dark:border-slate-700 text-center text-sm text-slate-500">
+                這一段尚未生成學習資料。按上方「AI 生成學習資料」，會用目前選用的連線產生摘要、閃卡與測驗。<br>內容較長時請分段生成；本機小模型建議每段 6k 字。</div>`;
+        }
+
+        function renderBar(tab) {
+            const el = document.getElementById('bar-' + tab);
+            if (!el) return;
+            const cs = appData.courses || [];
+            const doc = activeDoc();
+            if (!cs.length || !doc) { el.innerHTML = emptyCoursesHtml(); return; }
+            const size = appData.chunkSize || 6000;
+            const chunks = chunkText(doc.content, size);
+            if (studyChunk >= chunks.length) studyChunk = 0;
+            const sel = 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-2 text-xs';
+            const has = !!studyData();
+            el.innerHTML = `<div class="custom-card p-4 rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-wrap items-center gap-2">
+                <span class="text-xs text-slate-400">目前課程</span>
+                <select onchange="selectCourse(this.value)" class="${sel} max-w-[14rem]">${cs.map(c => `<option value="${c.id}" ${c.id === appData.activeCourseId ? 'selected' : ''}>${escapeHtml(c.title)}</option>`).join('')}</select>
+                <select onchange="changeStudyChunk(this.value)" class="${sel}">${chunks.map((c, i) => `<option value="${i}" ${i === studyChunk ? 'selected' : ''}>第 ${i + 1} / ${chunks.length} 段（${c.length} 字）${(doc.study || {})[size + '-' + i] ? ' ✓' : ''}</option>`).join('')}</select>
+                <select onchange="changeChunkSize(this.value)" class="${sel}">${[6000, 12000, 24000].map(n => `<option value="${n}" ${n === size ? 'selected' : ''}>每段約 ${n / 1000}k 字</option>`).join('')}</select>
+                <button onclick="generateStudy()" ${studyBusy ? 'disabled' : ''} class="px-4 py-2 bg-brand-500 text-white rounded-xl text-xs font-semibold hover:bg-brand-600 transition ${studyBusy ? 'opacity-50' : ''}">${has ? '重新生成' : 'AI 生成學習資料'}</button>
+                <p class="study-status w-full text-xs text-slate-400 whitespace-pre-wrap">${escapeHtml(studyStatusText)}</p>
+            </div>`;
+        }
+
+        const CARD = 'custom-card p-6 rounded-2xl border border-slate-200 dark:border-slate-700';
+        const BTN = 'px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800 transition';
+
+        function renderNotesPanel() {
+            const el = document.getElementById('panel-notes');
+            if (!activeDoc()) { el.innerHTML = ''; return; }
+            const d = studyData();
+            if (!d) { el.innerHTML = emptyStudyHtml(); return; }
+            el.innerHTML = d.summary || (d.keyPoints || []).length
+                ? `<div class="${CARD}"><h3 class="font-bold mb-3"><i class="fa-solid fa-wand-magic-sparkles text-brand-500 mr-2"></i>AI 摘要（第 ${studyChunk + 1} 段）</h3>
+                    <p class="text-sm leading-relaxed whitespace-pre-wrap mb-4">${escapeHtml(d.summary || '')}</p>
+                    <ul class="space-y-2 mb-4">${(d.keyPoints || []).map(k => `<li class="text-sm flex"><i class="fa-solid fa-circle-check text-brand-500 mt-1 mr-2 text-xs"></i><span>${escapeHtml(k)}</span></li>`).join('')}</ul>
+                    <button onclick="saveStudyAsNote()" class="${BTN}"><i class="fa-solid fa-note-sticky mr-1"></i>存為筆記</button></div>`
+                : `<div class="${CARD} text-sm text-slate-400">摘要生成失敗，請按「重新生成」。</div>`;
+        }
+
+        function renderFlashPanel() {
+            const el = document.getElementById('panel-flash');
+            if (!activeDoc()) { el.innerHTML = ''; return; }
+            const d = studyData();
+            if (!d) { el.innerHTML = emptyStudyHtml(); return; }
+            const cards = d.flashcards || [];
+            if (!cards.length) { el.innerHTML = `<div class="${CARD} text-sm text-slate-400">閃卡生成失敗，請按「重新生成」。</div>`; return; }
+            const c = cards[flashIdx % cards.length];
+            el.innerHTML = `<div class="${CARD} max-w-2xl mx-auto">
+                <div onclick="flipCard()" class="cursor-pointer min-h-[12rem] flex items-center justify-center text-center p-6 rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                    <div><div class="text-xs text-brand-500 mb-2">${flashFlip ? '答案' : '問題'}（點擊翻面）</div>
+                    <div class="text-lg font-semibold whitespace-pre-wrap">${escapeHtml(flashFlip ? c.a : c.q)}</div></div></div>
+                <div class="flex items-center justify-between mt-4">
+                    <button onclick="moveFlash(-1)" class="${BTN}">上一張</button>
+                    <span class="text-xs text-slate-400">${(flashIdx % cards.length) + 1} / ${cards.length}</span>
+                    <button onclick="moveFlash(1)" class="${BTN}">下一張</button></div></div>`;
+        }
+        function flipCard() { flashFlip = !flashFlip; renderFlashPanel(); }
+        function moveFlash(dir) {
+            const n = ((studyData() || {}).flashcards || []).length || 1;
+            flashIdx = (flashIdx + dir + n) % n; flashFlip = false; renderFlashPanel();
+        }
+
+        function renderQuizPanel() {
+            const el = document.getElementById('panel-quiz');
+            if (!activeDoc()) { el.innerHTML = ''; return; }
+            const d = studyData();
+            if (!d) { el.innerHTML = emptyStudyHtml(); return; }
+            const qs = d.quiz || [];
+            if (!qs.length) { el.innerHTML = `<div class="${CARD} text-sm text-slate-400">測驗生成失敗，請按「重新生成」。</div>`; return; }
+            if (quizIdx >= qs.length) {
+                el.innerHTML = `<div class="${CARD} max-w-2xl mx-auto text-center"><div class="text-4xl font-bold text-brand-500 mb-2">${quizScore} / ${qs.length}</div>
+                    <p class="text-sm text-slate-500 mb-4">測驗完成！</p><button onclick="restartStudyQuiz()" class="${BTN}">重做測驗</button></div>`;
+                return;
+            }
+            const q = qs[quizIdx];
+            el.innerHTML = `<div class="${CARD} max-w-2xl mx-auto">
+                <div class="text-xs text-slate-400 mb-2">第 ${quizIdx + 1} / ${qs.length} 題</div>
+                <h4 class="font-bold text-lg mb-4">${escapeHtml(q.q)}</h4>
+                <div class="space-y-2">${q.options.map((o, i) => {
+                    let cls = 'border-slate-200 dark:border-slate-700 hover:border-brand-500';
+                    if (quizPicked !== null) {
+                        if (i === q.answer) cls = 'border-green-500 bg-green-50 dark:bg-green-900/20';
+                        else if (i === quizPicked) cls = 'border-red-500 bg-red-50 dark:bg-red-900/20';
+                        else cls = 'border-slate-200 dark:border-slate-700 opacity-60';
+                    }
+                    return `<button ${quizPicked !== null ? 'disabled' : ''} onclick="answerStudyQuiz(${i})" class="w-full text-left p-3 rounded-xl border text-sm ${cls}">${escapeHtml(o)}</button>`;
+                }).join('')}</div>
+                ${quizPicked !== null ? `<div class="mt-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-800/50 text-sm"><b>${quizPicked === q.answer ? '答對了！' : '答錯了。'}</b> ${escapeHtml(q.explain || '')}</div>
+                    <button onclick="nextStudyQuiz()" class="${BTN} mt-3">${quizIdx + 1 >= qs.length ? '查看成績' : '下一題'}</button>` : ''}</div>`;
+        }
+        function answerStudyQuiz(i) {
+            const q = studyData().quiz[quizIdx];
+            quizPicked = i;
+            if (i === q.answer) quizScore++;
+            renderQuizPanel();
+        }
+        function nextStudyQuiz() {
+            const qs = studyData().quiz;
+            quizIdx++; quizPicked = null;
+            if (quizIdx >= qs.length && !quizRecorded) {
+                quizRecorded = true;
+                (appData.quizResults = appData.quizResults || []).push({ courseId: appData.activeCourseId, score: quizScore, total: qs.length, at: Date.now() });
+                savePersist(); updateDashboardStats();
+            }
+            renderQuizPanel();
+        }
+        function restartStudyQuiz() { quizIdx = 0; quizScore = 0; quizPicked = null; quizRecorded = false; renderQuizPanel(); }
+
+        function renderStudyTabs() {
+            if (!activeCourse() && (appData.courses || []).length) appData.activeCourseId = appData.courses[0].id;
+            ['notes', 'flash', 'quiz'].forEach(renderBar);
+            renderNotesPanel(); renderFlashPanel(); renderQuizPanel(); renderNotes();
+        }
+
+        function saveStudyAsNote() {
+            const c = activeCourse(); const d = studyData();
+            if (!c || !d) return;
+            appData.notes.push({
+                id: Date.now(), courseId: c.id,
+                title: `${c.title}・第 ${studyChunk + 1} 段摘要`,
+                content: (d.summary || '') + '\n\n' + (d.keyPoints || []).map(k => '• ' + k).join('\n'),
+                date: new Date().toISOString().split('T')[0]
+            });
+            savePersist(); renderNotes(); toast('已存入「我的筆記」。');
+            syncCourseKb(c, { manual: false });
+        }
+
+        function parseJsonLoose(t) {
+            t = String(t).trim().replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+            const a = t.indexOf('{'), b = t.lastIndexOf('}');
+            if (a < 0 || b <= a) throw new Error('模型回覆中找不到 JSON');
+            return JSON.parse(t.slice(a, b + 1));
+        }
+        function answerOk(x) { return Number.isInteger(x.answer) && x.answer >= 0 && x.answer < x.options.length; }
+        const STUDY_NORMALIZERS = {
+            summary(j) {
+                const summary = typeof j.summary === 'string' ? j.summary.trim() : '';
+                const keyPoints = Array.isArray(j.keyPoints) ? j.keyPoints.map(String).filter(Boolean).slice(0, 12) : [];
+                if (!summary && !keyPoints.length) throw new Error('摘要內容為空');
+                return { summary, keyPoints };
+            },
+            flashcards(j) {
+                const cards = (Array.isArray(j.flashcards) ? j.flashcards : []).filter(c => c && c.q && c.a).map(c => ({ q: String(c.q), a: String(c.a) })).slice(0, 20);
+                if (!cards.length) throw new Error('沒有有效的閃卡');
+                return { flashcards: cards };
+            },
+            quiz(j) {
+                const qs = (Array.isArray(j.quiz) ? j.quiz : []).map(x => {
+                    const options = Array.isArray(x && x.options) ? x.options.map(String) : [];
+                    const answer = Number.isInteger(x && x.answer) ? x.answer : parseInt(x && x.answer, 10);
+                    return { q: String((x && x.q) || ''), options, answer, explain: String((x && x.explain) || '') };
+                }).filter(x => x.q && x.options.length >= 2 && answerOk(x)).slice(0, 10);
+                if (!qs.length) throw new Error('沒有有效的測驗題');
+                return { quiz: qs };
+            }
+        };
+
+        async function generateStudy() {
+            if (studyBusy) return;
+            const course = activeCourse(), doc = activeDoc(), conn = getActiveConn();
+            if (!course || !doc) return;
+            if (!conn) { alert('請先到「設定」新增並選用一組 LLM 連線。'); return; }
+            const key = studyKey();
+            const chunk = chunkText(doc.content, appData.chunkSize || 6000)[studyChunk];
+            const sys = '你是專業的學習教材設計師。只輸出一個合法的 JSON 物件，不要輸出任何說明文字或 Markdown 標記。所有內容使用繁體中文，且只能依據提供的教材內容，不可自行編造。';
+            const base = `教材內容：\n"""\n${chunk}\n"""\n\n`;
+            const jobs = [
+                ['summary', '摘要重點', base + '請輸出 JSON：{"summary":"150 字內的整體摘要","keyPoints":["重點1","重點2"]}，keyPoints 共 5 到 8 個。'],
+                ['flashcards', '閃卡', base + '請輸出 JSON：{"flashcards":[{"q":"問題或名詞","a":"簡短答案或解釋"}]}，共 8 張。'],
+                ['quiz', '測驗', base + '請輸出 JSON：{"quiz":[{"q":"題目","options":["選項一","選項二","選項三","選項四"],"answer":0,"explain":"解析"}]}，共 5 題四選一單選；answer 是正確選項的索引，範圍 0 到 3。']
+            ];
+            studyBusy = true; studyStatusText = '生成中…';
+            renderStudyTabs();
+            const result = { createdAt: Date.now() };
+            const failures = [];
+            for (let i = 0; i < jobs.length; i++) {
+                const [kind, label, prompt] = jobs[i];
+                setStudyStatus(`生成中 (${i + 1}/${jobs.length})：${label}…`);
+                let done = false, lastErr = '';
+                for (let attempt = 0; attempt < 2 && !done; attempt++) {
+                    try {
+                        const msg = attempt === 0 ? prompt : prompt + '\n\n上一次的輸出不是合法 JSON，請這次只輸出 JSON。';
+                        const raw = await callLLM([{ role: 'user', content: msg }], conn, { system: sys, json: true, maxTokens: 4096, numCtx: 8192 });
+                        Object.assign(result, STUDY_NORMALIZERS[kind](parseJsonLoose(raw)));
+                        done = true;
+                    } catch (err) {
+                        lastErr = err instanceof TypeError ? `無法連線（${err.message}）` : err.message;
+                    }
+                }
+                if (!done) failures.push(`${label}：${lastErr}`);
+            }
+            studyBusy = false;
+            if (Object.keys(result).length > 1) {
+                doc.study = doc.study || {};
+                doc.study[key] = result;
+                savePersist();
+            }
+            studyStatusText = failures.length ? '部分項目失敗，可按「重新生成」重試：\n' + failures.join('\n') : '✅ 已完成';
+            resetStudyView();
+            renderStudyTabs(); renderCourses(); updateDashboardStats();
+            if (Object.keys(result).length > 1) await syncCourseKb(course, { manual: false });
+        }
+
+        // 點擊課程後，若該段尚無學習資料且已有 LLM 連線，自動生成（每段每次開啟頁面只自動嘗試一次，失敗可手動重試）
+        const autoTried = new Set();
+        function maybeAutoStudy() {
+            if (appData.autoStudy === false || studyBusy) return;
+            const c = activeCourse(), d = activeDoc();
+            if (!c || !d || !getActiveConn() || studyData()) return;
+            const k = c.id + ':' + studyKey();
+            if (autoTried.has(k)) return;
+            autoTried.add(k);
+            generateStudy();
+        }
+        function setAutoStudy(v) { appData.autoStudy = !!v; savePersist(); }
+
+
+        // ===== 延伸工具：簡報工坊 / MD 轉錄 =====
+        const THEMES = { ocean: { bg: '#0f172a', fg: '#f8fafc', acc: '#38bdf8' }, paper: { bg: '#ffffff', fg: '#1e293b', acc: '#2563eb' }, sunset: { bg: '#fff7ed', fg: '#431407', acc: '#ea580c' }, forest: { bg: '#052e16', fg: '#ecfdf5', acc: '#4ade80' } };
+        let deck = null, deckIdx = 0, presenting = false, mdName = '未命名';
+        const $id = i => document.getElementById(i);
+        function dlText(name, text, mime = 'text/markdown') { const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type: mime + ';charset=utf-8' })); a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1500); }
+
+        // --- MD 轉錄 ---
+        function plainToMd(t) {
+            return t.replace(/\r/g, '').split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+                if (/^[•·●▪◦]\s*/.test(l)) return '- ' + l.replace(/^[•·●▪◦]\s*/, '');
+                if (l.length <= 24 && !/[。，,.；;：:！？!?]$/.test(l) && !/^(\d+[.)、]|-|#|\|)/.test(l)) return '## ' + l;
+                return l;
+            }).join('\n\n');
+        }
+        async function mdPickFile(ev) {
+            const f = ev.target.files[0]; if (!f) return;
+            const type = f.name.split('.').pop().toUpperCase(); mdName = f.name.replace(/\.[^.]+$/, '');
+            try { toast('解析中…'); const r = await extractText(f, type); $id('md-out').value = TEXT_TYPES.includes(type) ? r.text : plainToMd(r.text); toast('已轉成 Markdown，可再按「AI 整理排版」'); }
+            catch (e) { toast('解析失敗：' + e.message, 6000); }
+            ev.target.value = '';
+        }
+        async function mdAi() {
+            const raw = $id('md-out').value.trim(); if (!raw) return toast('請先選擇檔案或貼上文字');
+            const b = $id('md-ai-btn'); b.disabled = true; b.textContent = 'AI 整理中…';
+            try {
+                const out = await callLLM([{ role: 'user', content: '請把以下原始文字整理成結構清楚的 Markdown：用 #、## 建立標題層級，條列用 -，表格用 Markdown 表格，修正斷行與明顯錯字，不新增原文沒有的資訊，只輸出 Markdown 本文。\n\n' + raw.slice(0, 12000) }], getActiveConn(), { system: '你是專業的文件排版助理，使用繁體中文，只輸出 Markdown。', maxTokens: 4096 });
+                $id('md-out').value = out.replace(/^```(?:markdown|md)?\n|\n```\s*$/g, ''); toast('AI 整理完成');
+            } catch (e) { toast('AI 整理失敗：' + e.message, 6000); }
+            finally { b.disabled = false; b.textContent = 'AI 整理排版'; }
+        }
+        function mdCopy() { navigator.clipboard.writeText($id('md-out').value).then(() => toast('已複製'), () => toast('複製失敗，請手動選取')); }
+        function mdDownload() { const t = $id('md-out').value; if (!t.trim()) return toast('沒有內容可下載'); dlText(mdName + '.md', t); }
+        function mdToCourse() {
+            const t = $id('md-out').value.trim(); if (!t) return toast('沒有內容');
+            appData.documents.push({ id: Date.now() + Math.random(), name: mdName + '.md', size: (t.length / 1024).toFixed(1) + ' KB', type: 'MD', content: t, chars: t.length, study: {}, date: new Date().toISOString().slice(0, 10) });
+            migrateCourses(); savePersist(); renderCourses(); toast('已存成課程，請到「課程學習區」查看');
+        }
+        function mdToSlides() { const t = $id('md-out').value.trim(); if (!t) return toast('沒有內容'); $id('sl-input').value = t; switchTab('slides'); toast('已帶入簡報工坊'); }
+
+        // --- 簡報工坊 ---
+        function slSave() { appData.deck = deck; savePersist(); }
+        function cover(title) { return { title, bullets: ['由智海 AI 生成'], notes: '' }; }
+        function mdToDeck(md) {
+            let title = '', slides = [], cur = null, m;
+            const push = () => { if (cur && (cur.title || cur.bullets.length)) slides.push(cur); };
+            for (const raw of md.replace(/\r/g, '').split('\n')) {
+                const l = raw.trim(); if (!l) continue;
+                if (!title && (m = l.match(/^#\s+(.*)/))) { title = m[1]; continue; }
+                if ((m = l.match(/^#{1,3}\s+(.*)/))) { push(); cur = { title: m[1], bullets: [], notes: '' }; continue; }
+                if (!cur) cur = { title: title || '內容', bullets: [], notes: '' };
+                cur.bullets.push(l.replace(/^([-*+]|\d+[.)、])\s+/, '').replace(/[*_`]/g, ''));
+            }
+            push();
+            if (slides.length === 1 && slides[0].bullets.length > 6) { const b = slides[0].bullets; slides = []; for (let i = 0; i < b.length; i += 4) slides.push({ title: '重點 ' + (slides.length + 1), bullets: b.slice(i, i + 4), notes: '' }); }
+            if (!title) title = slides[0] ? slides[0].title : '未命名簡報';
+            return { title, theme: $id('sl-theme').value, slides: [cover(title), ...slides] };
+        }
+        function slMd() { const src = $id('sl-input').value.trim(); if (!src) return toast('請先貼上稿件'); deck = mdToDeck(src); deckIdx = 0; slSave(); slRender(true); }
+        function slFromCourse() { const d = activeDoc(); if (!d) return toast('請先到課程學習區開啟一門課程'); $id('sl-input').value = d.content.slice(0, 8000); toast('已帶入「' + activeCourse().title + '」前 8000 字'); }
+        async function slAi() {
+            const src = $id('sl-input').value.trim(); if (!src) return toast('請先貼上稿件或輸入主題');
+            const n = $id('sl-count').value, b = $id('sl-ai-btn'); b.disabled = true; b.textContent = '生成中…';
+            try {
+                const raw = await callLLM([{ role: 'user', content: `請把下列稿件或主題做成約 ${n} 頁的簡報（不含封面）。每頁 title 為簡短標題，bullets 為 2–5 點精簡重點（每點 30 字內），notes 為講者備註。只輸出 JSON：{"title":"簡報標題","slides":[{"title":"","bullets":[""],"notes":""}]}\n\n稿件：\n${src.slice(0, 12000)}` }], getActiveConn(), { system: '你是專業簡報設計師，使用繁體中文，只輸出 JSON。', json: true, maxTokens: 4096 });
+                const j = parseJsonLoose(raw); if (!j || !Array.isArray(j.slides)) throw new Error('回傳格式不正確，請重試');
+                const title = j.title || '未命名簡報';
+                deck = { title, theme: $id('sl-theme').value, slides: [cover(title), ...j.slides.map(x => ({ title: String(x.title || ''), bullets: (x.bullets || []).map(String), notes: String(x.notes || '') }))] };
+                deckIdx = 0; slSave(); slRender(true); toast('簡報已生成，可直接編輯');
+            } catch (e) { toast('生成失敗：' + e.message, 6000); }
+            finally { b.disabled = false; b.textContent = 'AI 生成簡報'; }
+        }
+        function slideHtml(s, i) {
+            const t = THEMES[deck.theme] || THEMES.ocean, c = i === 0;
+            const bl = s.bullets.length ? `<ul style="margin:0;padding-left:${c ? 0 : 3}cqw;list-style:${c ? 'none' : 'disc'};font-size:2.5cqw;line-height:1.7">${s.bullets.map(b => `<li>${escapeHtml(b)}</li>`).join('')}</ul>` : '';
+            return `<div style="container-type:inline-size;width:100%"><div style="aspect-ratio:16/9;background:${t.bg};color:${t.fg};padding:6cqw;box-sizing:border-box;overflow:hidden;display:flex;flex-direction:column;justify-content:${c ? 'center' : 'flex-start'};${c ? 'align-items:center;text-align:center;' : ''}font-family:system-ui,'Noto Sans TC',sans-serif"><div style="font-size:${c ? 5.2 : 3.6}cqw;font-weight:800;color:${c ? t.fg : t.acc};line-height:1.25">${escapeHtml(s.title)}</div><div style="width:8cqw;height:.6cqw;background:${t.acc};margin:2cqw ${c ? 'auto' : '0'} 3cqw"></div>${bl}</div></div>`;
+        }
+        function slRender(editor) {
+            const empty = $id('sl-empty'), box = $id('sl-editor');
+            if (!deck) { empty.classList.remove('hidden'); box.classList.add('hidden'); return; }
+            empty.classList.add('hidden'); box.classList.remove('hidden');
+            deckIdx = Math.max(0, Math.min(deckIdx, deck.slides.length - 1)); const s = deck.slides[deckIdx];
+            $id('sl-thumbs').innerHTML = deck.slides.map((x, i) => `<button onclick="slGo(${i})" class="shrink-0 w-28 text-left text-xs p-2 rounded-lg border ${i === deckIdx ? 'border-brand-500 bg-brand-500/10' : 'border-slate-200 dark:border-slate-700'}"><div class="font-bold">${i + 1}</div><div class="truncate">${escapeHtml(x.title)}</div></button>`).join('');
+            $id('sl-canvas').innerHTML = slideHtml(s, deckIdx);
+            if (editor) { $id('sl-f-title').value = s.title; $id('sl-f-bullets').value = s.bullets.join('\n'); $id('sl-f-notes').value = s.notes || ''; $id('sl-theme').value = deck.theme; }
+        }
+        function slGo(i) { deckIdx = i; slRender(true); }
+        function slEdit() { const s = deck.slides[deckIdx]; s.title = $id('sl-f-title').value; s.bullets = $id('sl-f-bullets').value.split('\n').map(x => x.trim()).filter(Boolean); s.notes = $id('sl-f-notes').value; if (deckIdx === 0) deck.title = s.title; slSave(); slRender(false); }
+        function slTheme(v) { if (deck) { deck.theme = v; slSave(); slRender(false); } }
+        function slOp(op) {
+            const a = deck.slides, i = deckIdx;
+            if (op === 'add') { a.splice(i + 1, 0, { title: '新頁面', bullets: [], notes: '' }); deckIdx = i + 1; }
+            else if (op === 'del' && a.length > 1 && i > 0) { a.splice(i, 1); deckIdx = Math.max(0, i - 1); }
+            else if (op === 'up' && i > 1) { [a[i - 1], a[i]] = [a[i], a[i - 1]]; deckIdx = i - 1; }
+            else if (op === 'down' && i > 0 && i < a.length - 1) { [a[i + 1], a[i]] = [a[i], a[i + 1]]; deckIdx = i + 1; }
+            slSave(); slRender(true);
+        }
+        function slShow() { $id('sl-present-body').innerHTML = slideHtml(deck.slides[deckIdx], deckIdx); $id('sl-present-n').textContent = (deckIdx + 1) + ' / ' + deck.slides.length; }
+        function slPlay() { if (!deck) return; presenting = true; deckIdx = 0; const o = $id('sl-present'); o.classList.remove('hidden'); o.classList.add('flex'); if (o.requestFullscreen) o.requestFullscreen().catch(() => {}); slShow(); }
+        function slNext(d) { deckIdx = Math.max(0, Math.min(deck.slides.length - 1, deckIdx + d)); slShow(); }
+        function slClose() { presenting = false; const o = $id('sl-present'); o.classList.add('hidden'); o.classList.remove('flex'); if (document.fullscreenElement) document.exitFullscreen(); slRender(true); }
+        document.addEventListener('keydown', e => { if (!presenting) return; if (e.key === 'Escape') slClose(); else if (e.key === 'ArrowRight' || e.key === ' ') slNext(1); else if (e.key === 'ArrowLeft') slNext(-1); });
+        document.addEventListener('fullscreenchange', () => { if (presenting && !document.fullscreenElement) slClose(); });
+        function slExportMd() { dlText(deck.title + '.md', `# ${deck.title}\n\n` + deck.slides.slice(1).map(s => `## ${s.title}\n\n` + s.bullets.map(b => '- ' + b).join('\n') + (s.notes ? `\n\n> 講者備註：${s.notes}` : '')).join('\n\n') + '\n'); }
+        function slExportHtml() {
+            const secs = deck.slides.map((s, i) => `<section style="display:none">${slideHtml(s, i)}</section>`).join('');
+            dlText(deck.title + '.html', `<!doctype html><html lang="zh-TW"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(deck.title)}</title></head><body style="margin:0;background:#000;display:flex;align-items:center;justify-content:center;height:100vh"><div style="width:min(100vw,177.7vh)">${secs}</div><script>var s=document.querySelectorAll('section'),i=0;function show(){s.forEach(function(e,k){e.style.display=k==i?'block':'none'})}show();document.onkeydown=function(e){if(e.key=='ArrowRight'||e.key==' ')i=Math.min(i+1,s.length-1);if(e.key=='ArrowLeft')i=Math.max(i-1,0);show()};document.onclick=function(){i=Math.min(i+1,s.length-1);show()};<\/script></body></html>`, 'text/html');
+        }
+        async function slExportPptx() {
+            try {
+                toast('產生 PPTX…'); await loadScript('https://cdnjs.cloudflare.com/ajax/libs/pptxgenjs/3.12.0/pptxgen.bundle.js');
+                const t = THEMES[deck.theme] || THEMES.ocean, h = c => c.replace('#', ''), F = 'Microsoft JhengHei', p = new PptxGenJS(); p.layout = 'LAYOUT_16x9';
+                deck.slides.forEach((s, i) => {
+                    const sl = p.addSlide(); sl.background = { color: h(t.bg) };
+                    if (i === 0) sl.addText(s.title, { x: 0.8, y: 2, w: 8.4, h: 1.2, fontSize: 38, bold: true, color: h(t.fg), align: 'center', fontFace: F });
+                    else {
+                        sl.addText(s.title, { x: 0.6, y: 0.4, w: 8.8, h: 0.9, fontSize: 28, bold: true, color: h(t.acc), fontFace: F });
+                        if (s.bullets.length) sl.addText(s.bullets.map(b => ({ text: b, options: { bullet: true, breakLine: true } })), { x: 0.8, y: 1.5, w: 8.4, h: 3.6, fontSize: 20, color: h(t.fg), valign: 'top', fontFace: F, paraSpaceAfter: 8 });
+                    }
+                    if (s.notes) sl.addNotes(s.notes);
+                });
+                await p.writeFile({ fileName: deck.title + '.pptx' });
+            } catch (e) { toast('PPTX 匯出失敗：' + e.message, 6000); }
+        }
+
+        // ===== 知識庫 JSON (建立 / 匯入 / 匯出) =====
+        function buildKb(c) {
+            const doc = getCourseDoc(c) || { content: '', study: {} };
+            return {
+                schema: 'zhihai-kb/1',
+                exportedAt: new Date().toISOString(),
+                course: { id: c.id, title: c.title, category: c.category, createdAt: c.createdAt },
+                source: { name: doc.name, type: doc.type, size: doc.size, chars: doc.chars, importedAt: doc.date, truncated: !!doc.content && doc.chars > doc.content.length },
+                chunkSize: 1200,
+                chunks: chunkText(doc.content || '', 1200).map((t, i) => ({ index: i, text: t })),
+                study: doc.study || {},
+                notes: appData.notes.filter(n => n.courseId === c.id).map(n => ({ title: n.title, content: n.content, date: n.date }))
+            };
+        }
+        function kbFileName(c) { return `${c.title.replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 40)}__${c.id}.kb.json`; }
+        function downloadJson(name, obj) {
+            const a = document.createElement('a');
+            a.href = 'data:application/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(obj, null, 2));
+            a.download = name;
+            document.body.appendChild(a); a.click(); a.remove();
+        }
+        function downloadKb(id) { const c = getCourse(id); if (c) downloadJson(kbFileName(c), buildKb(c)); }
+        function exportAllKb() {
+            const cs = appData.courses || [];
+            if (!cs.length) { toast('尚無課程可匯出。'); return; }
+            downloadJson(`zhihai_kb_all_${new Date().toISOString().split('T')[0]}.json`, { schema: 'zhihai-kb-bundle/1', exportedAt: new Date().toISOString(), courses: cs.map(buildKb) });
+        }
+
+        function addCounts(a, b) { a.imported += b.imported; a.skipped += b.skipped; a.invalid += b.invalid; }
+        function importKbObject(kb, meta = {}) {
+            const out = { imported: 0, skipped: 0, invalid: 0 };
+            if (kb && kb.schema === 'zhihai-kb-bundle/1' && Array.isArray(kb.courses)) { kb.courses.forEach(k => addCounts(out, importKbObject(k, meta))); return out; }
+            if (!kb || kb.schema !== 'zhihai-kb/1' || !kb.course || !kb.course.id || !Array.isArray(kb.chunks)) { out.invalid++; return out; }
+            const existing = getCourse(kb.course.id);
+            if (existing) {
+                if (meta.driveFileId && !existing.kb.drive) existing.kb.drive = { fileId: meta.driveFileId, savedAt: Date.now() };
+                out.skipped++; return out;
+            }
+            const today = new Date().toISOString().split('T')[0];
+            const content = kb.chunks.map(c => c.text || '').join('');
+            const src = kb.source || {};
+            const doc = { id: Date.now() + Math.random(), name: src.name || kb.course.title, size: src.size || '', type: String(src.type || 'TXT').toUpperCase(),
+                content, chars: src.chars || content.length, parseNote: src.truncated ? '內容過長，僅保留部分。' : '', study: kb.study || {}, date: src.importedAt || today };
+            appData.documents.push(doc);
+            const c = { id: kb.course.id, docId: doc.id, title: kb.course.title || doc.name, category: kb.course.category || TYPE_GROUP[doc.type] || 'doc', createdAt: kb.course.createdAt || Date.now(),
+                kb: { local: { via: 'browser', savedAt: Date.now() }, drive: meta.driveFileId ? { fileId: meta.driveFileId, savedAt: Date.now() } : null } };
+            appData.courses.push(c);
+            doc.courseId = c.id;
+            (kb.notes || []).forEach((n, i) => appData.notes.push({ id: Date.now() + i + 1, title: n.title || '', content: n.content || '', date: n.date || today, courseId: c.id }));
+            if (!appData.activeCourseId) appData.activeCourseId = c.id;
+            out.imported++;
+            return out;
+        }
+        function finishImport(n, src) {
+            savePersist(); renderDocuments(); renderCourses(); renderNotes(); renderStudyTabs(); renderMentorHeader(); updateDashboardStats();
+            toast(`從${src}載入：新增 ${n.imported} 門課程、略過重複 ${n.skipped}、格式不符 ${n.invalid}。`, 6000);
+        }
+        async function importKbFiles(event) {
+            const files = Array.from(event.target.files);
+            event.target.value = '';
+            const n = { imported: 0, skipped: 0, invalid: 0 };
+            for (const f of files) {
+                try { addCounts(n, importKbObject(JSON.parse(await f.text()))); } catch (e) { n.invalid++; }
+            }
+            finishImport(n, '檔案');
+        }
+
+        // ===== 本地資料夾 (File System Access API，Chrome / Edge) =====
+        const FS_OK = typeof window.showDirectoryPicker === 'function';
+        let localDirHandle = null;
+        function idbOpen() {
+            return new Promise((res, rej) => {
+                const r = indexedDB.open('zhihai-ai', 1);
+                r.onupgradeneeded = () => r.result.createObjectStore('kv');
+                r.onsuccess = () => res(r.result);
+                r.onerror = () => rej(r.error);
+            });
+        }
+        async function idbSet(k, v) { const db = await idbOpen(); return new Promise((res, rej) => { const tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); }
+        async function idbGet(k) { const db = await idbOpen(); return new Promise((res, rej) => { const rq = db.transaction('kv').objectStore('kv').get(k); rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error); }); }
+        async function loadLocalDirHandle() { try { localDirHandle = (await idbGet('dirHandle')) || null; } catch (e) { localDirHandle = null; } renderKbSettings(); }
+        async function localDirReady() {
+            if (!localDirHandle) return false;
+            try { return (await localDirHandle.queryPermission({ mode: 'readwrite' })) === 'granted'; } catch (e) { return false; }
+        }
+        async function pickLocalFolderBtn() {
+            if (!FS_OK) { toast('此瀏覽器不支援選擇資料夾，請改用 Chrome / Edge，或使用「匯出知識庫 JSON」。', 6000); return; }
+            try {
+                if (localDirHandle && !(await localDirReady())) {
+                    if ((await localDirHandle.requestPermission({ mode: 'readwrite' })) === 'granted') { toast('已重新授權資料夾：' + localDirHandle.name); renderKbSettings(); return; }
+                }
+                const h = await window.showDirectoryPicker({ mode: 'readwrite' });
+                localDirHandle = h;
+                await idbSet('dirHandle', h);
+                renderKbSettings();
+                toast('已選擇資料夾：' + h.name + '。之後每門課程的知識庫會自動寫入此處。', 5000);
+                for (const c of appData.courses || []) await syncCourseKb(c, { manual: false });
+            } catch (e) { if (e.name !== 'AbortError') toast('選擇資料夾失敗：' + e.message, 6000); }
+        }
+        async function writeLocalKb(c, kb) {
+            if (!(await localDirReady())) return false;
+            const fh = await localDirHandle.getFileHandle(kbFileName(c), { create: true });
+            const w = await fh.createWritable();
+            await w.write(JSON.stringify(kb, null, 2));
+            await w.close();
+            return true;
+        }
+        async function loadKbFromLocalFolder() {
+            if (!(await localDirReady())) { toast('請先選擇並授權資料夾。'); return; }
+            const n = { imported: 0, skipped: 0, invalid: 0 };
+            for await (const [name, h] of localDirHandle.entries()) {
+                if (h.kind === 'file' && name.endsWith('.kb.json')) {
+                    try { addCounts(n, importKbObject(JSON.parse(await (await h.getFile()).text()))); } catch (e) { n.invalid++; }
+                }
+            }
+            finishImport(n, '本機資料夾');
+        }
+
+        // ===== Google Drive =====
+        // 使用者指定的 Google OAuth 2.0 參數設定
+        const CLIENT_ID = '375971288943-097rhbub5h2d06f1g5lqs60in6pofj22.apps.googleusercontent.com';
+        // 註：本 App 只讀寫自己建立的知識庫檔案，改用 'https://www.googleapis.com/auth/drive.file' 即足夠，且授權範圍較小。
+        const SCOPES = 'https://www.googleapis.com/auth/drive';
+        const GIS_URL = 'https://accounts.google.com/gsi/client';
+        const DRIVE_FOLDER_NAME = '智海AI知識庫';
+        let gToken = null, gTokenExp = 0;
+
+        function driveTokenValid() { return !!gToken && Date.now() < gTokenExp; }
+
+        async function connectDrive() {
+            if (location.protocol === 'file:') {
+                throw new Error('Google 登入不支援以 file:// 開啟的頁面。請改用 http://localhost:8080 開啟本頁，並把該網址加入 OAuth 用戶端的「已授權的 JavaScript 來源」。');
+            }
+            await loadScript(GIS_URL);
+            if (!window.google || !google.accounts || !google.accounts.oauth2) throw new Error('Google 登入套件載入失敗，請確認網路。');
+            return new Promise((resolve, reject) => {
+                const client = google.accounts.oauth2.initTokenClient({
+                    client_id: CLIENT_ID,
+                    scope: SCOPES,
+                    callback: r => {
+                        if (r.error) return reject(new Error(r.error_description || r.error));
+                        if (google.accounts.oauth2.hasGrantedAllScopes && !google.accounts.oauth2.hasGrantedAllScopes(r, SCOPES)) return reject(new Error('尚未授予 Google Drive 權限。'));
+                        gToken = r.access_token;
+                        gTokenExp = Date.now() + ((Number(r.expires_in) || 3600) - 60) * 1000;
+                        appData.driveAuthorized = true;
+                        savePersist(); renderKbSettings();
+                        resolve(gToken);
+                    },
+                    error_callback: e => reject(new Error('登入視窗被關閉或遭瀏覽器封鎖（' + ((e && e.type) || 'unknown') + '）'))
+                });
+                client.requestAccessToken({ prompt: appData.driveAuthorized ? '' : 'consent' });
+            });
+        }
+
+        async function driveFetch(url, opts = {}) {
+            if (!driveTokenValid()) { const e = new Error('Google Drive 連線已逾時，請到設定按「連線 Google Drive」重新登入。'); e.status = 401; throw e; }
+            const res = await fetch(url, { ...opts, headers: { ...(opts.headers || {}), Authorization: 'Bearer ' + gToken } });
+            if (!res.ok) {
+                let msg = '';
+                try { const j = await res.json(); msg = (j.error && j.error.message) || ''; } catch (e) {}
+                const err = new Error(`Drive API ${res.status}${msg ? '：' + msg : ''}`);
+                err.status = res.status;
+                if (res.status === 401) { gToken = null; renderKbSettings(); }
+                throw err;
+            }
+            return res;
+        }
+        async function driveJson(url, opts) { return (await driveFetch(url, opts)).json(); }
+
+        async function ensureDriveFolder() {
+            if (appData.driveFolderId) {
+                try { const f = await driveJson(`https://www.googleapis.com/drive/v3/files/${appData.driveFolderId}?fields=id,trashed`); if (!f.trashed) return f.id; } catch (e) { if (e.status === 401) throw e; }
+            }
+            const q = `name='${DRIVE_FOLDER_NAME}' and mimeType='application/vnd.google-apps.folder' and trashed=false`;
+            const r = await driveJson(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&spaces=drive`);
+            if (r.files && r.files.length) { appData.driveFolderId = r.files[0].id; savePersist(); return appData.driveFolderId; }
+            const c = await driveJson('https://www.googleapis.com/drive/v3/files?fields=id', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name: DRIVE_FOLDER_NAME, mimeType: 'application/vnd.google-apps.folder' })
+            });
+            appData.driveFolderId = c.id; savePersist();
+            return c.id;
+        }
+
+        async function driveUpload(method, id, meta, json) {
+            const b = 'zhihai_' + Date.now().toString(36);
+            const body = `--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${b}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${json}\r\n--${b}--`;
+            const url = (id ? `https://www.googleapis.com/upload/drive/v3/files/${id}` : 'https://www.googleapis.com/upload/drive/v3/files') + '?uploadType=multipart&fields=id,modifiedTime';
+            return driveJson(url, { method, headers: { 'Content-Type': `multipart/related; boundary=${b}` }, body });
+        }
+
+        async function syncCourseKb(c, opts = {}) {
+            if (!c) return false;
+            const manual = !!opts.manual;
+            const kb = buildKb(c);
+            try {
+                if (appData.storageMode === 'drive') {
+                    if (!driveTokenValid()) {
+                        if (!manual) { toast('知識庫已保存在瀏覽器；尚未連線 Google Drive，所以還沒同步到 Drive。請到設定按「連線 Google Drive」。', 7000); return false; }
+                        await connectDrive();
+                    }
+                    const folderId = await ensureDriveFolder();
+                    const json = JSON.stringify(kb);
+                    let id = c.kb.drive && c.kb.drive.fileId, res = null;
+                    if (id) { try { res = await driveUpload('PATCH', id, { name: kbFileName(c) }, json); } catch (e) { if (e.status !== 404) throw e; } }
+                    if (!res) res = await driveUpload('POST', null, { name: kbFileName(c), parents: [folderId], mimeType: 'application/json' }, json);
+                    c.kb.drive = { fileId: res.id, savedAt: Date.now() };
+                    savePersist(); renderCourses(); renderKbSettings();
+                    if (manual) toast('已同步到 Google Drive：' + kbFileName(c));
+                    return true;
+                }
+                if (await writeLocalKb(c, kb)) {
+                    c.kb.local = { via: 'folder', savedAt: Date.now() };
+                    savePersist(); renderCourses();
+                    if (manual) toast('已寫入本機資料夾：' + kbFileName(c));
+                    return true;
+                }
+                if (manual) { downloadJson(kbFileName(c), kb); toast('已下載知識庫 JSON：' + kbFileName(c)); }
+                return true;
+            } catch (e) {
+                toast('知識庫同步失敗：' + e.message, 8000);
+                return false;
+            }
+        }
+        function syncCourseBtn(id) { return syncCourseKb(getCourse(id), { manual: true }); }
+
+        async function connectDriveBtn() {
+            try { await connectDrive(); toast('已連線 Google Drive。', 4000); } catch (e) { toast(e.message, 9000); }
+        }
+        async function syncAllBtn() {
+            const cs = appData.courses || [];
+            if (!cs.length) { toast('尚無課程。'); return; }
+            if (appData.storageMode !== 'drive' && !(await localDirReady())) { exportAllKb(); return; }
+            let ok = 0;
+            for (const c of cs) if (await syncCourseKb(c, { manual: true })) ok++;
+            toast(`已同步 ${ok} / ${cs.length} 門課程。`);
+        }
+        async function loadKbFromDriveBtn() {
+            try {
+                if (!driveTokenValid()) await connectDrive();
+                const folderId = await ensureDriveFolder();
+                const q = `'${folderId}' in parents and trashed=false`;
+                const r = await driveJson(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,modifiedTime)&pageSize=100`);
+                const n = { imported: 0, skipped: 0, invalid: 0 };
+                for (const f of (r.files || []).filter(x => x.name.endsWith('.kb.json'))) {
+                    try { addCounts(n, importKbObject(JSON.parse(await (await driveFetch(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`)).text()), { driveFileId: f.id })); } catch (e) { n.invalid++; }
+                }
+                finishImport(n, 'Google Drive');
+            } catch (e) { toast('從 Drive 載入失敗：' + e.message, 8000); }
+        }
+        function disconnectDrive() {
+            if (gToken && window.google && google.accounts && google.accounts.oauth2) { try { google.accounts.oauth2.revoke(gToken, () => {}); } catch (e) {} }
+            gToken = null; appData.driveAuthorized = false;
+            savePersist(); renderKbSettings(); toast('已中斷 Google Drive 連線。');
+        }
+
+        function setStorageMode(m) {
+            appData.storageMode = m;
+            savePersist(); renderKbSettings(); renderCourses();
+            if (m === 'drive') loadScript(GIS_URL).catch(() => {});
+        }
+        function renderKbSettings() {
+            const m = appData.storageMode || 'local';
+            [['local', 'kb-mode-local'], ['drive', 'kb-mode-drive']].forEach(([k, id]) => {
+                const b = document.getElementById(id);
+                if (b) b.className = 'p-2 border rounded-xl text-xs font-semibold ' + (m === k ? 'bg-brand-500 text-white border-brand-500' : '');
+            });
+            document.getElementById('kb-local-box').classList.toggle('hidden', m !== 'local');
+            document.getElementById('kb-drive-box').classList.toggle('hidden', m !== 'drive');
+            const ls = document.getElementById('kb-local-status');
+            if (!FS_OK) ls.textContent = '此瀏覽器不支援選擇資料夾；知識庫保存在瀏覽器，可用「匯出」下載 JSON。';
+            else if (!localDirHandle) ls.textContent = '尚未選擇資料夾；知識庫目前只保存在瀏覽器。';
+            else localDirReady().then(ok => { ls.textContent = `資料夾：${localDirHandle.name}（${ok ? '已授權，會自動寫入' : '需要重新授權，請按上方按鈕'}）`; });
+            const ds = document.getElementById('kb-drive-status');
+            const lines = [];
+            if (location.protocol === 'file:') lines.push('⚠️ 目前以 file:// 開啟，Google 登入無法使用，請改用 http://localhost:8080 開啟。');
+            lines.push(driveTokenValid() ? '✅ 已連線 Google Drive' : (appData.driveAuthorized ? '已授權過，但登入已逾時，請按「連線 Google Drive」重新登入。' : '尚未連線'));
+            lines.push(`目前網址來源：${location.origin}（需已加入 OAuth 用戶端的「已授權的 JavaScript 來源」）`);
+            ds.textContent = lines.join('\n');
+        }
+
+        let chatHistory = [];   // { role: 'user' | 'assistant', content }
+        let chatBusy = false;
+
+        function appendBubble(role, text, id) {
+            const box = document.getElementById('chat-messages');
+            const safe = escapeHtml(text);
+            const html = role === 'user'
+                ? `<div class="flex items-start justify-end space-x-3">
+                        <div class="p-4 rounded-2xl rounded-tr-none bg-brand-500 text-white text-sm max-w-lg shadow-sm whitespace-pre-wrap break-words">${safe}</div>
+                        <div class="w-8 h-8 rounded-full bg-slate-600 text-white flex items-center justify-center text-xs shrink-0"><i class="fa-solid fa-user"></i></div>
+                   </div>`
+                : `<div class="flex items-start space-x-3">
+                        <div class="w-8 h-8 rounded-full bg-brand-500 text-white flex items-center justify-center text-xs shrink-0"><i class="fa-solid fa-robot"></i></div>
+                        <div ${id ? `id="${id}"` : ''} class="custom-card p-4 rounded-2xl rounded-tl-none border border-slate-200 dark:border-slate-700 text-sm max-w-lg shadow-sm whitespace-pre-wrap break-words">${safe}</div>
+                   </div>`;
+            box.insertAdjacentHTML('beforeend', html);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        // 將長文字切成約 size 字的段落（盡量在換行或句號處切開）
+        function chunkText(text, size) {
+            const out = [];
+            let i = 0;
+            while (i < text.length) {
+                let end = Math.min(i + size, text.length);
+                if (end < text.length) {
+                    const cut = Math.max(text.lastIndexOf('\n', end), text.lastIndexOf('。', end));
+                    if (cut > i + size * 0.6) end = cut + 1;
+                }
+                out.push(text.slice(i, end));
+                i = end;
+            }
+            return out.length ? out : [''];
+        }
+
+        // 簡易檢索：以字元二元組 (bigram) 比對問題與教材片段，適用中英文
+        function bigrams(str) {
+            const t = str.replace(/\s+/g, '').toLowerCase();
+            const set = new Set();
+            for (let i = 0; i < t.length - 1; i++) set.add(t.slice(i, i + 2));
+            return set;
+        }
+
+        function retrieveContext(query, maxChars = 6000, maxPieces = 5) {
+            const q = bigrams(query);
+            if (!q.size) return [];
+            const cands = [];
+            scopedDocs().forEach(d => {
+                if (!d.content) return;
+                chunkText(d.content, 1200).forEach(c => {
+                    const b = bigrams(c);
+                    let score = 0;
+                    q.forEach(g => { if (b.has(g)) score++; });
+                    if (score > 0) cands.push({ name: d.name, text: c, score });
+                });
+            });
+            cands.sort((x, y) => y.score - x.score);
+            const out = [];
+            let total = 0;
+            for (const c of cands) {
+                if (out.length >= maxPieces || total + c.text.length > maxChars) break;
+                out.push(c);
+                total += c.text.length;
+            }
+            return out;
+        }
+
+        function buildSystemPrompt(query) {
+            let sys = '你是「智海 AI」的學習導師，請以繁體中文、清楚且有條理地回答學習者的問題。';
+            const docs = scopedDocs();
+            const ac = activeCourse();
+            if (ac && (appData.mentorScope || 'course') === 'course') sys += `\n\n目前學習課程：「${ac.title}」。請以此課程教材為主回答。`;
+            if (docs.length) {
+                let ctx = query ? retrieveContext(query) : [];
+                if (!ctx.length) ctx = docs.slice(0, 4).map(d => ({ name: d.name, text: d.content.slice(0, 1500) }));
+                sys += '\n\n以下是從學習者匯入教材中檢索到的片段，回答時請優先依據這些內容並標明出處檔名；若片段未涵蓋，請明確說明：\n';
+                ctx.forEach(c => { sys += `\n【${c.name}】\n${c.text}\n`; });
+            }
+            return sys;
+        }
+
+        // ===== Puter AI (Puter.js：免 API Key，使用者以 Puter 帳號登入，用量計在自己帳號) =====
+        function puterText(r) {
+            if (typeof r === 'string') return r;
+            const c = r && r.message && r.message.content;
+            if (typeof c === 'string') return c;
+            if (Array.isArray(c)) return c.map(b => (b && b.text) || '').join('');
+            return (r && r.text) ? String(r.text) : '';
+        }
+        function puterErr(e) {
+            return new Error((e && ((e.error && e.error.message) || e.message || (typeof e === 'string' ? e : ''))) || 'Puter 發生未知錯誤');
+        }
+        async function ensurePuter() {
+            await loadScript(PUTER_JS_URL).catch(() => { throw new Error('無法載入 Puter 套件，請確認網路可連線至 js.puter.com。'); });
+            if (!window.puter || !window.puter.ai) throw new Error('Puter 套件載入失敗，請重新整理頁面。');
+            try {
+                if (!(await window.puter.auth.isSignedIn())) await window.puter.auth.signIn();
+            } catch (e) {
+                throw new Error('尚未登入 Puter：請允許瀏覽器彈出視窗，並在「設定 → 測試連線」完成登入。（' + puterErr(e).message + '）');
+            }
+        }
+        async function callPuter(messages, conn, system, opts) {
+            await ensurePuter();
+            try {
+                const r = await window.puter.ai.chat(
+                    [{ role: 'system', content: system }, ...messages],
+                    { model: conn.model || PROVIDER_TYPES.puter.model, normalize: true, max_tokens: opts.maxTokens || undefined }
+                );
+                const out = puterText(r);
+                if (!out) throw new Error('模型回傳內容為空。');
+                return out;
+            } catch (e) { throw puterErr(e); }
+        }
+
+        async function callLLM(messages, conn, opts = {}) {
+            if (!conn) throw new Error('尚未設定任何 LLM 連線，請到「設定」新增一組連線。');
+            const provider = conn.type;
+            const key = conn.apiKey;
+            const base = (conn.endpoint || '').replace(/\/+$/, '');
+            const model = conn.model;
+            const system = opts.system || (opts.skipDocs ? '你是連線測試助理。' : buildSystemPrompt(opts.query));
+            if (provider === 'puter') return callPuter(messages, conn, system, opts);
+            let url, headers = { 'Content-Type': 'application/json' }, body, extract;
+
+            if (provider === 'anthropic') {
+                if (!key) throw new Error('此連線需要 Anthropic API Key，請到設定編輯連線。');
+                url = `${base}/v1/messages`;
+                headers['x-api-key'] = key;
+                headers['anthropic-version'] = '2023-06-01';
+                headers['anthropic-dangerous-direct-browser-access'] = 'true';
+                body = { model, max_tokens: opts.maxTokens || 1024, system, messages };
+                extract = j => (j.content || []).map(c => c.text || '').join('');
+            } else if (provider === 'gemini') {
+                if (!key) throw new Error('此連線需要 Google AI Studio API Key，請到設定編輯連線。');
+                url = `${base}/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
+                body = {
+                    systemInstruction: { parts: [{ text: system }] },
+                    generationConfig: opts.json ? { responseMimeType: 'application/json' } : undefined,
+                    contents: messages.map(m => ({ role: m.role === 'assistant' ? 'model' : 'user', parts: [{ text: m.content }] }))
+                };
+                extract = j => (((j.candidates || [])[0] || {}).content || {}).parts?.map(p => p.text || '').join('') || '';
+            } else if (provider === 'ollama') {
+                url = `${base}/api/chat`;
+                body = { model, stream: false, format: opts.json ? 'json' : undefined, options: opts.numCtx ? { num_ctx: opts.numCtx } : undefined, messages: [{ role: 'system', content: system }, ...messages] };
+                extract = j => (j.message || {}).content || '';
+            } else { // OpenAI 與 OpenAI 相容閘道
+                if (!key && !/localhost|127\.0\.0\.1/.test(base)) throw new Error('此連線需要 API Key，請到設定編輯連線。');
+                url = `${base}/chat/completions`;
+                if (key) headers['Authorization'] = `Bearer ${key}`;
+                body = { model, messages: [{ role: 'system', content: system }, ...messages] };
+                extract = j => (((j.choices || [])[0] || {}).message || {}).content || '';
+            }
+
+            if (key && /[^\x21-\x7E]/.test(key)) {
+                throw new Error('API Key 含有不合法字元（全形字、空白或換行），請重新複製貼上，確保只有英數字與符號。');
+            }
+            let res = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+            if (res.status === 404 && provider === 'ollama') {
+                // 伺服器沒有 /api/chat，改試 OpenAI 相容路徑
+                const msgs = [{ role: 'system', content: system }, ...messages];
+                res = await fetch(`${base.replace(/\/v1$/, '')}/v1/chat/completions`, {
+                    method: 'POST', headers, body: JSON.stringify({ model, messages: msgs })
+                });
+                extract = j => (((j.choices || [])[0] || {}).message || {}).content || '';
+            }
+            if (!res.ok) {
+                const t = await res.text();
+                throw new Error(`HTTP ${res.status}：${t.slice(0, 300)}`);
+            }
+            const out = extract(await res.json());
+            if (!out) throw new Error('模型回傳內容為空。');
+            return out;
+        }
+
+        async function sendChatMessage() {
+            if (chatBusy) return;
+            const input = document.getElementById('chat-input');
+            const text = input.value.trim();
+            if (!text) return;
+            input.value = '';
+            appendBubble('user', text);
+            chatHistory.push({ role: 'user', content: text });
+
+            chatBusy = true;
+            const pendingId = 'pending-' + Date.now();
+            appendBubble('assistant', '思考中…', pendingId);
+            try {
+                const reply = await callLLM(chatHistory.slice(-20), getActiveConn(), { query: text });
+                chatHistory.push({ role: 'assistant', content: reply });
+                document.getElementById(pendingId).textContent = reply;
+            } catch (err) {
+                chatHistory.pop();
+                let msg = '連線失敗：' + err.message;
+                if (err instanceof TypeError) {
+                    msg = `連線失敗（瀏覽器原始訊息：${err.message}）\n目標：${(getActiveConn() || {}).endpoint || '未設定'}\n請依序檢查：1) 按 F12 開啟 Console / Network 看紅字原因；2) 伺服器是否仍在執行；3) 伺服器是否允許 CORS（需允許 Authorization 標頭）；4) 若頁面是 https 而端點是 http 會被封鎖。`;
+                }
+                document.getElementById(pendingId).textContent = msg;
+            } finally {
+                chatBusy = false;
+                const box = document.getElementById('chat-messages');
+                box.scrollTop = box.scrollHeight;
+            }
+        }
+
+        function clearChat() {
+            chatHistory = [];
+            document.getElementById('chat-messages').innerHTML = `
+                <div class="flex items-start space-x-3">
+                    <div class="w-8 h-8 rounded-full bg-brand-500 text-white flex items-center justify-center text-xs shrink-0"><i class="fa-solid fa-robot"></i></div>
+                    <div class="custom-card p-4 rounded-2xl rounded-tl-none border border-slate-200 dark:border-slate-700 text-sm max-w-lg shadow-sm">
+                        對話已清除。請問還有什麼可以協助您的嗎？
+                    </div>
+                </div>
+            `;
+        }
+
+        // 資料匯出與匯入備份
+        function exportData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appData, null, 2));
+            const dlAnchor = document.createElement('a');
+            dlAnchor.setAttribute("href", dataStr);
+            dlAnchor.setAttribute("download", `zhihai_ai_backup_${new Date().toISOString().split('T')[0]}.json`);
+            document.body.appendChild(dlAnchor);
+            dlAnchor.click();
+            dlAnchor.remove();
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    appData = Object.assign({}, appData, JSON.parse(e.target.result));
+                    migrateConnections();
+                    migrateCourses();
+                    persistData();
+                    applySettings();
+                    renderDocuments();
+                    renderNotes();
+                    renderCourses('all');
+                    updateDashboardStats();
+                    alert('資料還原成功！');
+                } catch (err) {
+                    alert('匯入失敗：檔案格式不正確');
+                }
+            };
+            reader.readAsText(file);
+        }
+    </script>
+
+    <script>
+    // FlomiAI whiteboard engine (local-first)
+    const FB_KEY='zhihai_flomiai_board_v1';
+    let fb={nodes:[],lines:[],ink:[],seq:1,view:{x:0,y:0,z:1}};
+    let fbSelected=null,fbDraw=false,fbPan=null,fbStroke=null,fbQuizNode=null;
+    function fbLoad(){try{const v=JSON.parse(localStorage.getItem(FB_KEY)||'null');if(v&&Array.isArray(v.nodes))fb=v;}catch(e){}
+      if(!fb.nodes.length){fb.nodes=[{id:fb.seq++,x:130,y:100,w:230,h:120,type:'card',title:'核心概念',text:'在此輸入知識重點',color:'#dbeafe'},{id:fb.seq++,x:470,y:240,w:230,h:120,type:'card',title:'實際例子',text:'補充例子或應用情境',color:'#dcfce7'}];fb.lines=[{from:1,to:2}];fbSave();}
+      fbRender();}
+    function fbSave(){try{localStorage.setItem(FB_KEY,JSON.stringify(fb));}catch(e){}}
+    function fbStatus(t){const e=document.getElementById('fb-status');if(e)e.textContent=t;}
+    function fbRender(){
+      const items=document.getElementById('fb-items'),lines=document.getElementById('fb-lines'),ink=document.getElementById('fb-ink');if(!items||!lines||!ink)return;
+      items.innerHTML='';lines.innerHTML='';ink.innerHTML='';
+      fb.lines.forEach(l=>{const a=fb.nodes.find(n=>n.id===l.from),b=fb.nodes.find(n=>n.id===l.to);if(!a||!b)return;let x1=a.x+a.w/2,y1=a.y+a.h/2,x2=b.x+b.w/2,y2=b.y+b.h/2;lines.insertAdjacentHTML('beforeend',`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#64748b" stroke-width="3" marker-end="url(#fb-arrowhead)"/>`);});
+      lines.insertAdjacentHTML('afterbegin','<defs><marker id="fb-arrowhead" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#64748b"/></marker></defs>');
+      fb.nodes.forEach(n=>{const el=document.createElement('div');el.dataset.id=n.id;el.className='absolute rounded-xl border-2 shadow-sm overflow-hidden';el.style.cssText=`left:${n.x}px;top:${n.y}px;width:${n.w||220}px;min-height:${n.h||100}px;background:${n.color||'#fff'};border-color:${fbSelected===n.id?'#2563eb':'#cbd5e1'};touch-action:none;`;
+        if(n.type==='image'){el.innerHTML=`<div class="px-2 py-1 text-xs font-bold bg-white/80">圖片節點</div><img src="${n.src}" style="max-width:100%;max-height:180px;object-fit:contain">`;}
+        else if(n.type==='shape'){el.style.cssText+=`background:${n.shape==='circle'?'#fef3c7':'#f1f5f9'};min-height:60px;display:flex;align-items:center;justify-content:center;`;el.innerHTML=`<div class="p-3 text-center font-semibold">${n.text||n.shape||'圖形'}</div>`;if(n.shape==='circle')el.style.borderRadius='50%';}
+        else el.innerHTML=`<div class="fb-drag px-3 py-2 font-bold border-b border-slate-300/70 cursor-move flex justify-between gap-2"><span>${fbEsc(n.title||'知識卡')}</span><button title="編輯" onclick="event.stopPropagation();fbEdit(${n.id})">✎</button></div><div class="p-3 text-sm whitespace-pre-wrap" style="min-height:55px">${fbEsc(n.text||'')}</div>`;
+        el.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;e.stopPropagation();fbSelected=n.id;const rect=document.getElementById('fb-viewport').getBoundingClientRect();fbPan={kind:'node',id:n.id,sx:e.clientX,sy:e.clientY,ox:n.x,oy:n.y};el.setPointerCapture(e.pointerId);fbRender();});
+        el.addEventListener('pointermove',e=>{if(!fbPan||fbPan.kind!=='node'||fbPan.id!==n.id)return;const n2=fb.nodes.find(q=>q.id===n.id);n2.x=fbPan.ox+(e.clientX-fbPan.sx)/fb.view.z;n2.y=fbPan.oy+(e.clientY-fbPan.sy)/fb.view.z;el.style.left=n2.x+'px';el.style.top=n2.y+'px';fbRenderLinesOnly();});
+        el.addEventListener('pointerup',()=>{if(fbPan&&fbPan.kind==='node'){fbPan=null;fbSave();fbRender();}});
+        el.addEventListener('click',()=>{fbSelected=n.id;fbStatus('已選取：'+(n.title||n.text||'節點'));});
+        items.appendChild(el);
+      });
+      fb.ink.forEach(path=>{const p=document.createElementNS('http://www.w3.org/2000/svg','path');p.setAttribute('d',path.d);p.setAttribute('fill','none');p.setAttribute('stroke',path.color||'#f97316');p.setAttribute('stroke-width','4');p.setAttribute('stroke-linecap','round');p.setAttribute('stroke-linejoin','round');ink.appendChild(p);});
+      document.getElementById('fb-world').style.transform=`translate(${fb.view.x}px,${fb.view.y}px) scale(${fb.view.z})`;
+    }
+    function fbRenderLinesOnly(){const lines=document.getElementById('fb-lines');if(!lines)return;lines.innerHTML='<defs><marker id="fb-arrowhead" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#64748b"/></marker></defs>';fb.lines.forEach(l=>{const a=fb.nodes.find(n=>n.id===l.from),b=fb.nodes.find(n=>n.id===l.to);if(a&&b)lines.insertAdjacentHTML('beforeend',`<line x1="${a.x+a.w/2}" y1="${a.y+a.h/2}" x2="${b.x+b.w/2}" y2="${b.y+b.h/2}" stroke="#64748b" stroke-width="3" marker-end="url(#fb-arrowhead)"/>`);});}
+    function fbEsc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+    function fbAddNode(){const n={id:fb.seq++,x:100+Math.random()*450,y:100+Math.random()*350,w:230,h:125,type:'card',title:'新知識卡',text:'點擊 ✎ 編輯內容',color:['#dbeafe','#dcfce7','#fef3c7','#fce7f3'][fb.nodes.length%4]};fb.nodes.push(n);fbSelected=n.id;fbSave();fbRender();fbEdit(n.id);}
+    function fbEdit(id){const n=fb.nodes.find(q=>q.id===id);if(!n)return;const title=prompt('卡片標題',n.title||'知識卡');if(title===null)return;const text=prompt('卡片內容',n.text||'');if(text===null)return;n.title=title;n.text=text;fbSave();fbRender();fbStatus('卡片已更新');}
+    function fbAddShape(shape){const n={id:fb.seq++,x:200+fb.nodes.length*24,y:160+fb.nodes.length*18,w:shape==='circle'?100:150,h:shape==='circle'?100:70,type:'shape',shape,text:shape==='arrow'?'→ 關聯／流程':shape==='circle'?'概念':'重點區塊',color:'#fef3c7'};fb.nodes.push(n);fbSelected=n.id;fbSave();fbRender();}
+    function fbConnect(){if(!fbSelected){fbStatus('請先選取一張卡片');return;}const others=fb.nodes.filter(n=>n.id!==fbSelected);if(!others.length){fbStatus('再新增一張卡片即可連線');return;}const target=prompt('輸入要連接的節點編號：\\n'+others.map(n=>`${n.id}：${n.title||n.text||n.type}`).join('\\n'),String(others[0].id));if(target===null)return;const id=Number(target);if(!others.some(n=>n.id===id)){fbStatus('找不到該節點編號');return;}if(!fb.lines.some(l=>l.from===fbSelected&&l.to===id))fb.lines.push({from:fbSelected,to:id});fbSave();fbRender();fbStatus('已建立關聯線');}
+    function fbZoom(f){fb.view.z=Math.max(.35,Math.min(2.5,fb.view.z*f));fbRender();}
+    function fbResetView(){fb.view={x:0,y:0,z:1};fbRender();}
+    function fbToggleDraw(){fbDraw=!fbDraw;const v=document.getElementById('fb-viewport');v.style.cursor=fbDraw?'crosshair':'grab';fbStatus(fbDraw?'手寫模式：在空白畫布拖曳':'已離開手寫模式');}
+    function fbSetupCanvas(){const v=document.getElementById('fb-viewport');if(!v||v.dataset.ready)return;v.dataset.ready='1';
+      v.addEventListener('pointerdown',e=>{if(e.target.closest('#fb-items'))return;const r=v.getBoundingClientRect(),x=(e.clientX-r.left-fb.view.x)/fb.view.z,y=(e.clientY-r.top-fb.view.y)/fb.view.z;if(fbDraw){fbStroke={d:`M ${x} ${y}`,color:'#f97316'};fb.ink.push(fbStroke);v.setPointerCapture(e.pointerId);fbRender();}else fbPan={kind:'view',sx:e.clientX,sy:e.clientY,ox:fb.view.x,oy:fb.view.y};});
+      v.addEventListener('pointermove',e=>{if(fbStroke){const r=v.getBoundingClientRect(),x=(e.clientX-r.left-fb.view.x)/fb.view.z,y=(e.clientY-r.top-fb.view.y)/fb.view.z;fbStroke.d+=` L ${x} ${y}`;fbRender();}else if(fbPan&&fbPan.kind==='view'){fb.view.x=fbPan.ox+e.clientX-fbPan.sx;fb.view.y=fbPan.oy+e.clientY-fbPan.sy;document.getElementById('fb-world').style.transform=`translate(${fb.view.x}px,${fb.view.y}px) scale(${fb.view.z})`;}}); 
+      v.addEventListener('pointerup',()=>{if(fbStroke){fbStroke=null;fbSave();}if(fbPan&&fbPan.kind==='view'){fbPan=null;fbSave();}});
+      v.addEventListener('wheel',e=>{e.preventDefault();fbZoom(e.deltaY<0?1.08:.92);},{passive:false});
+    }
+    function fbAsk(){const q=document.getElementById('fb-question').value.trim(),n=fb.nodes.find(n=>n.id===fbSelected),out=document.getElementById('fb-answer');if(!q){out.textContent='請先輸入問題。';return;}if(!n){out.textContent='請先選取一張知識卡，讓助教知道問題範圍。';return;}out.textContent=`目前選取「${n.title||'知識卡'}」\\n內容：${n.text||'（無文字）'}\\n\\n你的問題：${q}\\n\\n本機白板已整理出問題脈絡。要取得生成式 AI 的實際解答，請將選取內容與問題送至你已設定的 Vision／LLM 服務；此白板模組目前不會假裝已呼叫外部模型。`; }
+    function fbSpeak(){const n=fb.nodes.find(n=>n.id===fbSelected);if(!n){fbStatus('請先選取知識卡');return;}if(!('speechSynthesis'in window)){fbStatus('此瀏覽器不支援語音朗讀');return;}speechSynthesis.cancel();const u=new SpeechSynthesisUtterance((n.title||'')+'。'+(n.text||''));u.lang='zh-TW';u.rate=.92;speechSynthesis.speak(u);fbStatus('正在朗讀');}
+    function fbAnimate(){const ns=[...fb.nodes];if(!ns.length)return;ns.forEach(n=>{const el=document.querySelector(`#fb-items [data-id="${n.id}"]`);if(el){el.style.opacity='.2';el.style.transform='scale(.94)';}});ns.forEach((n,i)=>setTimeout(()=>{const el=document.querySelector(`#fb-items [data-id="${n.id}"]`);if(el){el.style.transition='opacity .35s,transform .35s';el.style.opacity='1';el.style.transform='scale(1)';}if(i===ns.length-1){fbStatus('逐步講解完成');const first=ns[0];fbSelected=first.id;fbSpeak();}},i*900));}
+    function fbImageUpload(e){const f=e.target.files&&e.target.files[0];if(!f)return;const reader=new FileReader();reader.onload=()=>{fb.nodes.push({id:fb.seq++,x:150,y:120+fb.nodes.length*20,w:300,h:200,type:'image',src:reader.result,title:f.name,text:''});fbSelected=fb.nodes[fb.nodes.length-1].id;fbSave();fbRender();fbStatus('圖片已加入白板；OCR／圖表理解需連接 Vision 模型');};reader.readAsDataURL(f);e.target.value='';}
+    function fbQuiz(){if(!fbQuizNode){const candidates=fb.nodes.filter(n=>n.type==='card'&&n.text);if(!candidates.length){document.getElementById('fb-quiz-prompt').textContent='請先建立含有內容的知識卡。';return;}fbQuizNode=candidates[Math.floor(Math.random()*candidates.length)];document.getElementById('fb-quiz-prompt').textContent=`請輸入「${fbQuizNode.title}」卡片標題，作為內容回想練習。`;document.getElementById('fb-quiz-result').textContent='提示：答案可從白板卡片中尋找。';return;}const ans=document.getElementById('fb-quiz-answer').value.trim();const ok=ans.toLowerCase()===String(fbQuizNode.title||'').trim().toLowerCase();document.getElementById('fb-quiz-result').textContent=ok?'答對了！':`再試一次。提示：答案有 ${String(fbQuizNode.title||'').length} 個字。`;if(ok){fbQuizNode=null;document.getElementById('fb-quiz-answer').value='';}}
+    function fbExport(){const blob=new Blob([JSON.stringify(fb,null,2)],{type:'application/json'}),a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='FlomiAI白板.json';a.click();URL.revokeObjectURL(a.href);}
+    function fbImport(e){const f=e.target.files&&e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{try{const d=JSON.parse(r.result);if(!Array.isArray(d.nodes)||!Array.isArray(d.lines))throw Error('格式錯誤');fb=d;fbSave();fbRender();fbStatus('白板匯入成功');}catch(err){alert('匯入失敗：請選擇有效的白板 JSON。');}};r.readAsText(f);e.target.value='';}
+    document.addEventListener('DOMContentLoaded',()=>{fbLoad();fbSetupCanvas();});
+    </script>
+
+    <!-- PWA：Service Worker 註冊與安裝按鈕 -->
+    <script>
+        (function () {
+            let deferredInstall = null;
+            const isStandalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+            const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+            const swOk = location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+            const $ = id => document.getElementById(id);
+
+            function renderPwaStatus() {
+                const btn = $('pwa-install-btn'), side = $('pwa-install-sidebar'), st = $('pwa-status');
+                if (!st) return;
+                const canPrompt = !!deferredInstall && !isStandalone();
+                btn.classList.toggle('hidden', !canPrompt);
+                side.classList.toggle('hidden', !canPrompt);
+                side.classList.toggle('flex', canPrompt);
+                let msg;
+                if (isStandalone()) msg = '✅ 目前以 App 模式執行。';
+                else if (location.protocol === 'file:') msg = '⚠️ 以 file:// 開啟無法安裝。請部署到 https 網站，或以 http://localhost 開啟本頁。';
+                else if (!swOk) msg = '⚠️ 需要 https 網址（或 localhost）才能安裝成 App。';
+                else if (canPrompt) msg = '按上方按鈕即可安裝，之後可從桌面／主畫面直接開啟，並支援離線開啟介面。';
+                else if (isIOS) msg = 'iPhone／iPad：請用 Safari 點「分享」→「加入主畫面」。';
+                else msg = '若網址列沒有安裝圖示：Chrome／Edge 請從選單選「安裝智海 AI」或「加入主畫面」；Safari（Mac）選「檔案 → 加入 Dock」。';
+                st.textContent = msg;
+            }
+
+            window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredInstall = e; renderPwaStatus(); });
+            window.addEventListener('appinstalled', () => { deferredInstall = null; renderPwaStatus(); if (window.toast) toast('已安裝智海 AI，可從桌面或主畫面開啟。'); });
+
+            window.installPwa = async function () {
+                if (deferredInstall) {
+                    deferredInstall.prompt();
+                    try { await deferredInstall.userChoice; } catch (e) {}
+                    deferredInstall = null;
+                    renderPwaStatus();
+                } else {
+                    if (typeof openSettingsModal === 'function') openSettingsModal();
+                    renderPwaStatus();
+                }
+            };
+
+            if ('serviceWorker' in navigator && swOk) {
+                window.addEventListener('load', () => {
+                    navigator.serviceWorker.register('sw.js').then(reg => {
+                        reg.addEventListener('updatefound', () => {
+                            const nw = reg.installing;
+                            if (!nw) return;
+                            nw.addEventListener('statechange', () => {
+                                if (nw.state === 'installed' && navigator.serviceWorker.controller && window.toast) toast('智海 AI 已有新版本，關閉後重新開啟即可套用。', 8000);
+                            });
+                        });
+                    }).catch(err => console.warn('Service Worker 註冊失敗：', err));
+                });
+            }
+            window.addEventListener('DOMContentLoaded', renderPwaStatus);
+        })();
+    </script>
+    <div id="sl-present" class="hidden fixed inset-0 z-[100] bg-black items-center justify-center" onclick="slNext(1)">
+        <div id="sl-present-body" style="width:min(100vw,177.7vh)"></div>
+        <div class="absolute bottom-3 right-4 text-white/60 text-sm"><span id="sl-present-n"></span>　← → 切換　Esc 離開</div>
+        <button onclick="event.stopPropagation();slClose()" class="absolute top-3 right-4 text-white/70 text-2xl">✕</button>
+    </div>
+</body>
+</html>
