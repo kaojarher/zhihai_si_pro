@@ -16,3 +16,11 @@ GitHub Pages / Netlify / Cloudflare Pages / Vercel：把整個資料夾原樣上
 
 ## 更新版本
 修改 index.html 後，把 sw.js 第一行 VERSION 改成新字串（例如 zhihai-v2），使用者下次開啟即會取得新版。
+
+## FlomiAI 下一階段（Vision 白板）
+- 白板工具列新增「框選提問區域」與「辨識選取圖片」。
+- 框選區域後，可將範圍內的節點文字整理成上下文並送交目前 LLM 連線。
+- 選取圖片後，可呼叫支援視覺輸入的 OpenAI 相容、Gemini、Anthropic 或 Ollama 視覺模型進行教材辨識。
+- 請在「設定 → LLM 連線管理」選取／設定支援圖片輸入的模型。一般文字模型不保證支援圖片。
+- API 呼叫由瀏覽器直接送出；雲端供應商可能要求 API Key、CORS 設定與網路連線。不要在共用或公開裝置上儲存個人 API Key。
+- OCR 結果會存入所選圖片節點的文字欄位；請先人工校正辨識結果。

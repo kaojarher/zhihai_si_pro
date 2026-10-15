@@ -335,7 +335,7 @@
                 </div>
               </div>
               <div class="flex flex-wrap gap-2 items-center bg-white border rounded-xl p-2">
-                <button class="px-3 py-2 rounded-lg border" onclick="fbZoom(.8)">－縮小</button><button class="px-3 py-2 rounded-lg border" onclick="fbZoom(1.25)">＋放大</button><button class="px-3 py-2 rounded-lg border" onclick="fbResetView()">重設視圖</button>
+                <button class="px-3 py-2 rounded-lg border" onclick="fbZoom(.8)">－縮小</button><button class="px-3 py-2 rounded-lg border" onclick="fbZoom(1.25)">＋放大</button><button class="px-3 py-2 rounded-lg border" onclick="fbResetView()">重設視圖</button><button class="px-3 py-2 rounded-lg border" onclick="fbStartROI()">框選提問區域</button><button class="px-3 py-2 rounded-lg border" onclick="fbRecognizeSelectedImage()">辨識選取圖片</button>
                 <button class="px-3 py-2 rounded-lg border" onclick="fbAnimate()">▶逐步講解</button><button class="px-3 py-2 rounded-lg border" onclick="fbSpeak()">🔊朗讀選取卡</button>
                 <label class="px-3 py-2 rounded-lg border cursor-pointer">📷匯入圖片<input type="file" accept="image/*" class="hidden" onchange="fbImageUpload(event)"></label>
                 <button class="px-3 py-2 rounded-lg border" onclick="fbExport()">匯出白板</button><label class="px-3 py-2 rounded-lg border cursor-pointer">匯入白板<input type="file" accept=".json,application/json" class="hidden" onchange="fbImport(event)"></label>
@@ -343,6 +343,7 @@
               </div>
               <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_280px] gap-3 flex-1 min-h-[460px]">
                 <div id="fb-viewport" class="relative overflow-hidden rounded-2xl border border-slate-300 bg-slate-50 min-h-[460px] touch-none" style="background-image:radial-gradient(#cbd5e1 1px,transparent 1px);background-size:22px 22px">
+                  <div id="fb-roi-box" class="hidden absolute border-2 border-blue-600 bg-blue-300/20 pointer-events-none z-30"></div>
                   <div id="fb-world" class="absolute left-0 top-0" style="width:2200px;height:1500px;transform-origin:0 0">
                     <svg id="fb-lines" class="absolute inset-0 overflow-visible pointer-events-none" width="2200" height="1500"></svg>
                     <div id="fb-items" class="absolute inset-0"></div>
@@ -352,7 +353,7 @@
                 </div>
                 <aside class="!flex !w-auto !relative !border !rounded-2xl !p-4 !bg-white flex-col gap-3">
                   <h3 class="font-bold text-lg">AI 白板助教</h3>
-                  <p class="text-xs text-slate-500">選取一張卡片或上傳圖片，再輸入想釐清的問題。此版本提供本機互動工具；真正的多模態 AI 回答需在既有模型連線設定中配置 Vision 模型與金鑰。</p>
+                  <p class="text-xs text-slate-500">選取知識卡、圖片或框選畫布區域後提問。圖片辨識與區域提問會使用「設定」中的目前 AI 連線；請確認所選模型支援圖片輸入。</p>
                   <textarea id="fb-question" class="w-full border rounded-xl p-3 text-sm" rows="3" placeholder="例如：這個概念是什麼意思？請舉一個製造業例子。"></textarea>
                   <button class="rounded-xl bg-blue-600 text-white px-4 py-3 font-semibold" onclick="fbAsk()">針對選取內容提問</button>
                   <div id="fb-answer" class="text-sm rounded-xl bg-slate-50 p-3 min-h-[70px]">助教回覆會顯示在這裡。</div>
@@ -2142,7 +2143,7 @@
     // FlomiAI whiteboard engine (local-first)
     const FB_KEY='zhihai_flomiai_board_v1';
     let fb={nodes:[],lines:[],ink:[],seq:1,view:{x:0,y:0,z:1}};
-    let fbSelected=null,fbDraw=false,fbPan=null,fbStroke=null,fbQuizNode=null;
+    let fbSelected=null,fbDraw=false,fbPan=null,fbStroke=null,fbQuizNode=null,fbRoiMode=false,fbRoi=null,fbRoiStart=null;
     function fbLoad(){try{const v=JSON.parse(localStorage.getItem(FB_KEY)||'null');if(v&&Array.isArray(v.nodes))fb=v;}catch(e){}
       if(!fb.nodes.length){fb.nodes=[{id:fb.seq++,x:130,y:100,w:230,h:120,type:'card',title:'核心概念',text:'在此輸入知識重點',color:'#dbeafe'},{id:fb.seq++,x:470,y:240,w:230,h:120,type:'card',title:'實際例子',text:'補充例子或應用情境',color:'#dcfce7'}];fb.lines=[{from:1,to:2}];fbSave();}
       fbRender();}
@@ -2154,7 +2155,7 @@
       fb.lines.forEach(l=>{const a=fb.nodes.find(n=>n.id===l.from),b=fb.nodes.find(n=>n.id===l.to);if(!a||!b)return;let x1=a.x+a.w/2,y1=a.y+a.h/2,x2=b.x+b.w/2,y2=b.y+b.h/2;lines.insertAdjacentHTML('beforeend',`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#64748b" stroke-width="3" marker-end="url(#fb-arrowhead)"/>`);});
       lines.insertAdjacentHTML('afterbegin','<defs><marker id="fb-arrowhead" markerWidth="10" markerHeight="10" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#64748b"/></marker></defs>');
       fb.nodes.forEach(n=>{const el=document.createElement('div');el.dataset.id=n.id;el.className='absolute rounded-xl border-2 shadow-sm overflow-hidden';el.style.cssText=`left:${n.x}px;top:${n.y}px;width:${n.w||220}px;min-height:${n.h||100}px;background:${n.color||'#fff'};border-color:${fbSelected===n.id?'#2563eb':'#cbd5e1'};touch-action:none;`;
-        if(n.type==='image'){el.innerHTML=`<div class="px-2 py-1 text-xs font-bold bg-white/80">圖片節點</div><img src="${n.src}" style="max-width:100%;max-height:180px;object-fit:contain">`;}
+        if(n.type==='image'){el.innerHTML=`<div class="px-2 py-1 text-xs font-bold bg-white/80">${fbEsc(n.title||'圖片節點')}</div><img alt="白板圖片" src="${n.src}" style="max-width:100%;max-height:180px;object-fit:contain">`;}
         else if(n.type==='shape'){el.style.cssText+=`background:${n.shape==='circle'?'#fef3c7':'#f1f5f9'};min-height:60px;display:flex;align-items:center;justify-content:center;`;el.innerHTML=`<div class="p-3 text-center font-semibold">${n.text||n.shape||'圖形'}</div>`;if(n.shape==='circle')el.style.borderRadius='50%';}
         else el.innerHTML=`<div class="fb-drag px-3 py-2 font-bold border-b border-slate-300/70 cursor-move flex justify-between gap-2"><span>${fbEsc(n.title||'知識卡')}</span><button title="編輯" onclick="event.stopPropagation();fbEdit(${n.id})">✎</button></div><div class="p-3 text-sm whitespace-pre-wrap" style="min-height:55px">${fbEsc(n.text||'')}</div>`;
         el.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;e.stopPropagation();fbSelected=n.id;const rect=document.getElementById('fb-viewport').getBoundingClientRect();fbPan={kind:'node',id:n.id,sx:e.clientX,sy:e.clientY,ox:n.x,oy:n.y};el.setPointerCapture(e.pointerId);fbRender();});
@@ -2175,13 +2176,41 @@
     function fbZoom(f){fb.view.z=Math.max(.35,Math.min(2.5,fb.view.z*f));fbRender();}
     function fbResetView(){fb.view={x:0,y:0,z:1};fbRender();}
     function fbToggleDraw(){fbDraw=!fbDraw;const v=document.getElementById('fb-viewport');v.style.cursor=fbDraw?'crosshair':'grab';fbStatus(fbDraw?'手寫模式：在空白畫布拖曳':'已離開手寫模式');}
+    function fbStartROI(){fbRoiMode=true;fbRoi=null;const box=document.getElementById('fb-roi-box');box.classList.add('hidden');fbStatus('框選模式：在畫布拖曳選取範圍，再按「針對選取內容提問」');}
     function fbSetupCanvas(){const v=document.getElementById('fb-viewport');if(!v||v.dataset.ready)return;v.dataset.ready='1';
-      v.addEventListener('pointerdown',e=>{if(e.target.closest('#fb-items'))return;const r=v.getBoundingClientRect(),x=(e.clientX-r.left-fb.view.x)/fb.view.z,y=(e.clientY-r.top-fb.view.y)/fb.view.z;if(fbDraw){fbStroke={d:`M ${x} ${y}`,color:'#f97316'};fb.ink.push(fbStroke);v.setPointerCapture(e.pointerId);fbRender();}else fbPan={kind:'view',sx:e.clientX,sy:e.clientY,ox:fb.view.x,oy:fb.view.y};});
-      v.addEventListener('pointermove',e=>{if(fbStroke){const r=v.getBoundingClientRect(),x=(e.clientX-r.left-fb.view.x)/fb.view.z,y=(e.clientY-r.top-fb.view.y)/fb.view.z;fbStroke.d+=` L ${x} ${y}`;fbRender();}else if(fbPan&&fbPan.kind==='view'){fb.view.x=fbPan.ox+e.clientX-fbPan.sx;fb.view.y=fbPan.oy+e.clientY-fbPan.sy;document.getElementById('fb-world').style.transform=`translate(${fb.view.x}px,${fb.view.y}px) scale(${fb.view.z})`;}}); 
-      v.addEventListener('pointerup',()=>{if(fbStroke){fbStroke=null;fbSave();}if(fbPan&&fbPan.kind==='view'){fbPan=null;fbSave();}});
+      v.addEventListener('pointerdown',e=>{if(e.target.closest('#fb-items'))return;const r=v.getBoundingClientRect(),sx=e.clientX-r.left,sy=e.clientY-r.top,x=(sx-fb.view.x)/fb.view.z,y=(sy-fb.view.y)/fb.view.z;
+        if(fbRoiMode){fbRoiStart={sx,sy,x,y};const box=document.getElementById('fb-roi-box');box.classList.remove('hidden');box.style.left=sx+'px';box.style.top=sy+'px';box.style.width='0px';box.style.height='0px';v.setPointerCapture(e.pointerId);return;}
+        if(fbDraw){fbStroke={d:`M ${x} ${y}`,color:'#f97316'};fb.ink.push(fbStroke);v.setPointerCapture(e.pointerId);fbRender();}else fbPan={kind:'view',sx:e.clientX,sy:e.clientY,ox:fb.view.x,oy:fb.view.y};});
+      v.addEventListener('pointermove',e=>{if(fbRoiStart){const r=v.getBoundingClientRect(),cx=e.clientX-r.left,cy=e.clientY-r.top,box=document.getElementById('fb-roi-box');box.style.left=Math.min(fbRoiStart.sx,cx)+'px';box.style.top=Math.min(fbRoiStart.sy,cy)+'px';box.style.width=Math.abs(cx-fbRoiStart.sx)+'px';box.style.height=Math.abs(cy-fbRoiStart.sy)+'px';return;}if(fbStroke){const r=v.getBoundingClientRect(),x=(e.clientX-r.left-fb.view.x)/fb.view.z,y=(e.clientY-r.top-fb.view.y)/fb.view.z;fbStroke.d+=` L ${x} ${y}`;fbRender();}else if(fbPan&&fbPan.kind==='view'){fb.view.x=fbPan.ox+e.clientX-fbPan.sx;fb.view.y=fbPan.oy+e.clientY-fbPan.sy;document.getElementById('fb-world').style.transform=`translate(${fb.view.x}px,${fb.view.y}px) scale(${fb.view.z})`;}});
+      v.addEventListener('pointerup',e=>{if(fbRoiStart){const r=v.getBoundingClientRect(),ex=e.clientX-r.left,ey=e.clientY-r.top;const x1=(Math.min(fbRoiStart.sx,ex)-fb.view.x)/fb.view.z,y1=(Math.min(fbRoiStart.sy,ey)-fb.view.y)/fb.view.z,x2=(Math.max(fbRoiStart.sx,ex)-fb.view.x)/fb.view.z,y2=(Math.max(fbRoiStart.sy,ey)-fb.view.y)/fb.view.z;fbRoi={x:x1,y:y1,w:x2-x1,h:y2-y1};fbRoiStart=null;fbRoiMode=false;document.getElementById('fb-roi-box').classList.add('hidden');const hits=fb.nodes.filter(n=>n.x<(fbRoi.x+fbRoi.w)&&n.x+(n.w||220)>fbRoi.x&&n.y<(fbRoi.y+fbRoi.h)&&n.y+(n.h||100)>fbRoi.y);fbStatus(`已框選區域：包含 ${hits.length} 個節點`);return;}if(fbStroke){fbStroke=null;fbSave();}if(fbPan&&fbPan.kind==='view'){fbPan=null;fbSave();}});
       v.addEventListener('wheel',e=>{e.preventDefault();fbZoom(e.deltaY<0?1.08:.92);},{passive:false});
     }
-    function fbAsk(){const q=document.getElementById('fb-question').value.trim(),n=fb.nodes.find(n=>n.id===fbSelected),out=document.getElementById('fb-answer');if(!q){out.textContent='請先輸入問題。';return;}if(!n){out.textContent='請先選取一張知識卡，讓助教知道問題範圍。';return;}out.textContent=`目前選取「${n.title||'知識卡'}」\\n內容：${n.text||'（無文字）'}\\n\\n你的問題：${q}\\n\\n本機白板已整理出問題脈絡。要取得生成式 AI 的實際解答，請將選取內容與問題送至你已設定的 Vision／LLM 服務；此白板模組目前不會假裝已呼叫外部模型。`; }
+    function fbImageParts(dataUrl){const m=String(dataUrl||'').match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,([\s\S]+)$/);if(!m)throw new Error('圖片格式無法辨識，請使用 JPG、PNG 或 WebP。');return {mime:m[1],data:m[2]};}
+    async function fbCallVision(conn,prompt,imageData){
+      if(!conn)throw new Error('尚未設定 AI 連線，請先到「設定」新增或選擇連線。');
+      if(conn.type==='puter')throw new Error('目前白板的圖片辨識尚未接通 Puter 多模態介面；請改用支援圖片輸入的 OpenAI 相容、Gemini、Claude 或 Ollama 視覺模型連線。');
+      const base=(conn.endpoint||'').replace(/\/+$/,''),key=conn.apiKey||'',model=conn.model||'',img=fbImageParts(imageData);let url,headers={'Content-Type':'application/json'},body,extract;
+      if(conn.type==='gemini'){
+        if(!key)throw new Error('Gemini 連線需要 API Key。');url=`${base}/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`;
+        body={contents:[{role:'user',parts:[{text:prompt},{inlineData:{mimeType:img.mime,data:img.data}}]}]};extract=j=>((((j.candidates||[])[0]||{}).content||{}).parts||[]).map(p=>p.text||'').join('');
+      }else if(conn.type==='anthropic'){
+        if(!key)throw new Error('Claude 連線需要 API Key。');url=`${base}/v1/messages`;headers['x-api-key']=key;headers['anthropic-version']='2023-06-01';headers['anthropic-dangerous-direct-browser-access']='true';
+        body={model,max_tokens:1600,messages:[{role:'user',content:[{type:'text',text:prompt},{type:'image',source:{type:'base64',media_type:img.mime,data:img.data}}]}]};extract=j=>(j.content||[]).map(c=>c.text||'').join('');
+      }else if(conn.type==='ollama'){
+        url=`${base}/api/chat`;body={model,stream:false,messages:[{role:'user',content:prompt,images:[img.data]}]};extract=j=>(j.message||{}).content||'';
+      }else{
+        if(!key&&!/localhost|127\.0\.0\.1/.test(base))throw new Error('此連線需要 API Key。');url=`${base}/chat/completions`;if(key)headers.Authorization=`Bearer ${key}`;
+        body={model,messages:[{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:imageData}}]}]};extract=j=>((((j.choices||[])[0]||{}).message||{}).content||'');
+      }
+      if(key&&/[^\x21-\x7E]/.test(key))throw new Error('API Key 含有不合法字元，請檢查設定。');
+      const res=await fetch(url,{method:'POST',headers,body:JSON.stringify(body)});if(!res.ok)throw new Error(`Vision API HTTP ${res.status}：${(await res.text()).slice(0,240)}`);const out=extract(await res.json());if(!out)throw new Error('模型沒有回傳可讀取的辨識內容。');return out;
+    }
+    function fbContextNodes(){if(fbRoi){return fb.nodes.filter(n=>n.x<(fbRoi.x+fbRoi.w)&&n.x+(n.w||220)>fbRoi.x&&n.y<(fbRoi.y+fbRoi.h)&&n.y+(n.h||100)>fbRoi.y);}const n=fb.nodes.find(n=>n.id===fbSelected);return n?[n]:[];}
+    async function fbAsk(){const q=document.getElementById('fb-question').value.trim(),out=document.getElementById('fb-answer');if(!q){out.textContent='請先輸入問題。';return;}const nodes=fbContextNodes();if(!nodes.length){out.textContent='請先選取知識卡，或按「框選提問區域」在畫布上選取範圍。';return;}
+      const imageNode=nodes.find(n=>n.type==='image'&&n.src);const context=nodes.map(n=>`[${n.type||'node'}] ${n.title||n.shape||'節點'}：${n.text||''}`).join('\n');const conn=typeof getActiveConn==='function'?getActiveConn():null;
+      if(imageNode){out.textContent='正在將選取圖片與問題送交目前 Vision 模型…';try{const answer=await fbCallVision(conn,`你是繁體中文 AI 教學助教。請先辨識圖片中的文字、公式與圖表，再回答問題。對不確定的辨識內容請標註「需人工確認」，不要臆測。\n白板相關文字：\n${context}\n\n使用者問題：${q}`,imageNode.src);out.textContent=answer;fbStatus('圖片理解完成');}catch(err){out.textContent='圖片理解失敗：'+err.message;fbStatus('請檢查模型設定與網路連線');}return;}
+      try{if(!conn)throw new Error('尚未設定 AI 連線。');out.textContent='正在請 AI 助教整理答案…';const answer=await callLLM([{role:'user',content:`請使用繁體中文回答，採教學引導方式，先解釋概念並提供具體例子；若資訊不足請明確指出。\n白板選取內容：\n${context}\n\n問題：${q}`}],conn,{system:'你是重視正確性與循序引導的 AI 教學助教。根據使用者提供的白板上下文回答，不得聲稱已看見未提供的內容。',skipDocs:true,maxTokens:1400});out.textContent=answer;fbStatus('AI 回答完成');}catch(err){out.textContent='AI 提問失敗：'+err.message;fbStatus('請檢查模型連線設定');}}
+    async function fbRecognizeSelectedImage(){const n=fb.nodes.find(n=>n.id===fbSelected);const out=document.getElementById('fb-answer');if(!n||n.type!=='image'||!n.src){fbStatus('請先點選白板中的圖片節點');return;}out.textContent='正在辨識圖片中的文字、公式與圖表…';try{const answer=await fbCallVision(typeof getActiveConn==='function'?getActiveConn():null,'請以繁體中文辨識這張教材圖片。依序輸出：1. 可辨識的文字；2. 數學公式（盡可能使用 LaTeX）；3. 圖表或流程結構；4. 不確定、需要人工確認的部分。不要自行補齊看不清楚的內容。',n.src);n.text=answer;n.title=(n.title||'教材圖片')+'（已辨識）';fbSave();fbRender();out.textContent=answer;fbStatus('辨識完成，結果已保存至圖片節點文字');}catch(err){out.textContent='圖片辨識失敗：'+err.message;fbStatus('請檢查 Vision 模型設定');}}
     function fbSpeak(){const n=fb.nodes.find(n=>n.id===fbSelected);if(!n){fbStatus('請先選取知識卡');return;}if(!('speechSynthesis'in window)){fbStatus('此瀏覽器不支援語音朗讀');return;}speechSynthesis.cancel();const u=new SpeechSynthesisUtterance((n.title||'')+'。'+(n.text||''));u.lang='zh-TW';u.rate=.92;speechSynthesis.speak(u);fbStatus('正在朗讀');}
     function fbAnimate(){const ns=[...fb.nodes];if(!ns.length)return;ns.forEach(n=>{const el=document.querySelector(`#fb-items [data-id="${n.id}"]`);if(el){el.style.opacity='.2';el.style.transform='scale(.94)';}});ns.forEach((n,i)=>setTimeout(()=>{const el=document.querySelector(`#fb-items [data-id="${n.id}"]`);if(el){el.style.transition='opacity .35s,transform .35s';el.style.opacity='1';el.style.transform='scale(1)';}if(i===ns.length-1){fbStatus('逐步講解完成');const first=ns[0];fbSelected=first.id;fbSpeak();}},i*900));}
     function fbImageUpload(e){const f=e.target.files&&e.target.files[0];if(!f)return;const reader=new FileReader();reader.onload=()=>{fb.nodes.push({id:fb.seq++,x:150,y:120+fb.nodes.length*20,w:300,h:200,type:'image',src:reader.result,title:f.name,text:''});fbSelected=fb.nodes[fb.nodes.length-1].id;fbSave();fbRender();fbStatus('圖片已加入白板；OCR／圖表理解需連接 Vision 模型');};reader.readAsDataURL(f);e.target.value='';}
