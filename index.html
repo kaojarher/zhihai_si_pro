@@ -354,7 +354,7 @@
                 <button class="px-3 py-2 rounded-lg border" onclick="fbFit()">符合視窗</button><button class="px-3 py-2 rounded-lg border" onclick="fbResetView()">重設視圖</button>
                 <span class="w-px h-6 bg-slate-200"></span>
                 <button id="fb-btn-roi" class="px-3 py-2 rounded-lg border" onclick="fbStartROI()">框選提問區域</button><button id="fb-btn-roi-clear" class="hidden px-3 py-2 rounded-lg border" onclick="fbClearROI()">取消框選</button><button class="px-3 py-2 rounded-lg border" onclick="fbRecognizeSelectedImage()">辨識選取圖片</button>
-                <button class="px-3 py-2 rounded-lg border" onclick="fbAnimate()">▶逐步講解</button><button class="px-3 py-2 rounded-lg border" onclick="fbSpeak()">🔊朗讀選取卡</button>
+                <button id="fb-btn-tour" class="px-3 py-2 rounded-lg border" onclick="fbAnimate()">▶逐步講解</button><button class="px-3 py-2 rounded-lg border" onclick="fbSpeak()">🔊朗讀選取卡</button>
                 <label class="px-3 py-2 rounded-lg border cursor-pointer">📷匯入圖片<input type="file" accept="image/jpeg,image/png,image/webp,image/gif" class="hidden" onchange="fbImageUpload(event)"></label>
                 <button class="px-3 py-2 rounded-lg border" onclick="fbExport()">匯出白板</button><label class="px-3 py-2 rounded-lg border cursor-pointer">匯入白板<input type="file" accept=".json,application/json" class="hidden" onchange="fbImport(event)"></label>
                 <button class="px-3 py-2 rounded-lg border text-red-600" onclick="fbClearAll()">清空白板</button>
@@ -2633,7 +2633,57 @@
       }catch(err){out.textContent='圖片辨識失敗：'+err.message;fbStatus('請檢查 Vision 模型設定');}
     }
     function fbSpeak(){const n=fb.nodes.find(n=>n.id===fbSelected);if(!n){fbStatus('請先選取知識卡');return;}if(!('speechSynthesis'in window)){fbStatus('此瀏覽器不支援語音朗讀');return;}speechSynthesis.cancel();const u=new SpeechSynthesisUtterance((n.title||'')+'。'+(n.text||''));u.lang='zh-TW';u.rate=.92;speechSynthesis.speak(u);fbStatus('正在朗讀');}
-    function fbAnimate(){const ns=[...fb.nodes];if(!ns.length)return;ns.forEach(n=>{const el=document.querySelector(`#fb-items [data-id="${n.id}"]`);if(el){el.style.opacity='.2';el.style.transform='scale(.94)';}});ns.forEach((n,i)=>setTimeout(()=>{const el=document.querySelector(`#fb-items [data-id="${n.id}"]`);if(el){el.style.transition='opacity .35s,transform .35s';el.style.opacity='1';el.style.transform='scale(1)';}if(i===ns.length-1){fbStatus('逐步講解完成');const first=ns[0];fbSelected=first.id;fbSpeak();}},i*900));}
+    // 逐步講解：一次只顯示一個節點 → 立刻朗讀該節點 → 朗讀結束後才進入下一個節點
+    let fbTour=null;
+    function fbNodeSpeech(n){return ((n.title?n.title+'。':'')+(n.text||'')).replace(/[*_`#>]/g,'').replace(/\s+/g,' ').trim();}
+    function fbTourOrder(){
+      const ns=[...fb.nodes].filter(n=>n.type!=='image'||n.title||n.text);
+      const ids=new Set(ns.map(n=>n.id)),indeg=new Map(ns.map(n=>[n.id,0])),out=new Map(ns.map(n=>[n.id,[]]));
+      (fb.lines||[]).forEach(l=>{if(ids.has(l.from)&&ids.has(l.to)){out.get(l.from).push(l.to);indeg.set(l.to,indeg.get(l.to)+1);}});
+      const byPos=(a,b)=>a.y-b.y||a.x-b.x,res=[],seen=new Set();
+      const walk=id=>{if(seen.has(id))return;seen.add(id);res.push(ns.find(n=>n.id===id));out.get(id).map(t=>ns.find(n=>n.id===t)).sort(byPos).forEach(t=>walk(t.id));};
+      ns.filter(n=>!indeg.get(n.id)).sort(byPos).forEach(n=>walk(n.id));
+      ns.sort(byPos).forEach(n=>walk(n.id));
+      return res;
+    }
+    function fbSpeakAsync(text,tour){
+      return new Promise(res=>{
+        const est=Math.max(1500,text.length*230);let done=false,started=false,t0,t1;
+        const fin=()=>{if(done)return;done=true;clearTimeout(t0);clearTimeout(t1);tour.abort=null;res();};
+        tour.abort=()=>{try{speechSynthesis.cancel();}catch(e){}fin();};
+        if(!('speechSynthesis'in window)||!text){t1=setTimeout(fin,est);return;}
+        try{
+          speechSynthesis.cancel();const u=new SpeechSynthesisUtterance(text);u.lang='zh-TW';u.rate=.92;
+          u.onstart=()=>{started=true;};u.onend=fin;u.onerror=fin;
+          t0=setTimeout(()=>{if(!started){try{speechSynthesis.cancel();}catch(e){}clearTimeout(t1);t1=setTimeout(fin,est);}},2500); // 無語音可用時，改以閱讀時間等待
+          t1=setTimeout(()=>{try{speechSynthesis.cancel();}catch(e){}fin();},est*2.5+4000);
+          speechSynthesis.speak(u);
+        }catch(e){t1=setTimeout(fin,est);}
+      });
+    }
+    function fbTourBtn(running){const b=fbEl('fb-btn-tour');if(b)b.textContent=running?'■停止講解':'▶逐步講解';}
+    async function fbAnimate(){
+      if(fbTour){fbTour.stop=true;if(fbTour.abort)fbTour.abort();return;}
+      const order=fbTourOrder();if(!order.length){fbStatus('白板上沒有可講解的卡片');return;}
+      const tour=fbTour={stop:false,abort:null};fbTourBtn(true);
+      const elOf=n=>document.querySelector(`#fb-items [data-id="${n.id}"]`);
+      order.forEach(n=>{const el=elOf(n);if(el){el.style.transition='none';el.style.opacity='0.08';el.style.transform='scale(.94)';}});
+      try{
+        for(let i=0;i<order.length&&!tour.stop;i++){
+          const n=order[i],el=elOf(n);
+          fbStatus(`逐步講解 ${i+1} / ${order.length}：${n.title||'（無標題）'}`);
+          if(el){el.style.transition='opacity .35s,transform .35s';el.style.opacity='1';el.style.transform='scale(1)';}
+          fbSelected=n.id;fbSelLine=null;fbMarkSel();
+          await fbSpeakAsync(fbNodeSpeech(n),tour);          // 節點出現後立即朗讀，讀完才換下一個
+          if(!tour.stop)await new Promise(r=>setTimeout(r,350));
+        }
+        fbStatus(tour.stop?'已停止講解':'逐步講解完成');
+      }finally{
+        order.forEach(n=>{const el=elOf(n);if(el){el.style.opacity='1';el.style.transform='scale(1)';}});
+        try{speechSynthesis.cancel();}catch(e){}
+        fbTour=null;fbTourBtn(false);
+      }
+    }
     function fbImageUpload(e){
       const f=e.target.files&&e.target.files[0];if(!f)return;
       const allowed=['image/jpeg','image/png','image/webp','image/gif'];
