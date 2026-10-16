@@ -2980,5 +2980,625 @@ const PC = {
     });
 })();
     </script>
+    <!-- 資深同仁工具組（OJT 指導者）：3 個外掛 -->
+    <script>
+// ===== 資深同仁工具組（OJT 指導者）：外掛 1/3 工作分解與微教材 =====
+window.OJT = (function () {
+    const q = id => document.getElementById(id);
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+    const D = () => {
+        const o = (appData.ojt = appData.ojt || {});
+        o.jobs = o.jobs || []; o.capsets = o.capsets || []; o.scenarios = o.scenarios || []; o.sessions = o.sessions || [];
+        o.faq = o.faq || []; o.inbox = o.inbox || [];
+        o.mx = o.mx || { people: [], skills: [], cells: {}, evidence: [] };
+        o.mx.people = o.mx.people || []; o.mx.skills = o.mx.skills || []; o.mx.cells = o.mx.cells || {}; o.mx.evidence = o.mx.evidence || [];
+        return o;
+    };
+    const save = () => { try { persistData(); } catch (e) { toast('儲存失敗：' + e.message, 6000); } };
+    const splitList = s => String(s || '').split(/[,，、;；\n]/).map(x => x.trim()).filter(Boolean);
+    async function askJSON(prompt, sys, maxTokens) {
+        const raw = await callLLM([{ role: 'user', content: prompt }], getActiveConn(), { system: sys, maxTokens: maxTokens || 4096, json: true });
+        return parseJsonLoose(raw);
+    }
+    const cls = {
+        inp: 'w-full text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-transparent p-2 focus:outline-none focus:ring-2 focus:ring-brand-500',
+        btn: 'px-3 py-2 rounded-xl text-xs font-semibold border border-slate-200 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 transition disabled:opacity-60',
+        pri: 'px-4 py-2 rounded-xl text-xs font-semibold bg-brand-500 text-white hover:bg-brand-600 transition disabled:opacity-60',
+        card: 'custom-card rounded-2xl border border-slate-200 dark:border-slate-700 p-5 space-y-3'
+    };
+    function busyBtn(b, txt, fn) {
+        return async (...a) => { const o = b.textContent; b.disabled = true; b.textContent = txt; try { await fn(...a); } finally { b.disabled = false; b.textContent = o; } };
+    }
+    function docOptions() {
+        return '<option value="">— 從已匯入文件帶入 —</option>' + (appData.documents || []).filter(d => d.content).map(d => `<option value="${esc(d.id)}">${esc(d.name)}（${d.content.length} 字）</option>`).join('');
+    }
+    function findDoc(id) { return (appData.documents || []).find(d => String(d.id) === String(id)); }
+    function csvCell(v) { return '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"'; }
+    function dlCsv(name, rows) { dlText(name, '﻿' + rows.map(r => r.map(csvCell).join(',')).join('\r\n'), 'text/csv'); }
+    return { q, esc, uid, D, save, splitList, askJSON, cls, busyBtn, docOptions, findDoc, csvCell, dlCsv };
+})();
+
+(function () {
+    const { q, esc, uid, D, save, splitList, askJSON, cls, busyBtn, docOptions, findDoc, dlCsv } = OJT;
+    const { inp, btn, pri, card } = cls;
+    let cur = null;            // 目前編輯中的工作分解表
+    let caps = null, capIdx = 0; // 目前微教材
+
+    const newJob = () => ({ id: uid('jb_'), title: '', goal: '', tools: '', safety: '', skills: '', steps: [{ step: '', keypoints: '', reason: '', risk: '', inferred: false }], updated: Date.now() });
+
+    // ---- 純函式：序列化（可獨立測試）----
+    const JB = {
+        norm(j) {
+            const steps = (Array.isArray(j.steps) ? j.steps : []).filter(s => s && (s.step || s.name)).map(s => ({
+                step: String(s.step || s.name || '').trim(), keypoints: [].concat(s.keypoints || s.points || '').join('\n').trim(),
+                reason: String(s.reason || '').trim(), risk: String(s.risk || s.quality || '').trim(), inferred: !!s.inferred
+            }));
+            if (!steps.length) throw new Error('沒有有效的步驟');
+            return { id: uid('jb_'), title: String(j.title || '未命名作業').trim(), goal: String(j.goal || '').trim(),
+                tools: [].concat(j.tools || []).join('、'), safety: [].concat(j.safety || []).join('\n'), skills: [].concat(j.skills || []).join('、'), steps, updated: Date.now() };
+        },
+        toMd(j) {
+            const c = t => String(t || '').replace(/\|/g, '\\|').replace(/\n/g, '<br>');
+            let m = `# 工作分解表：${j.title}\n\n- 作業目標：${j.goal || '—'}\n- 工具／材料：${j.tools || '—'}\n- 對應技能：${j.skills || '—'}\n`;
+            if (j.safety) m += `- 安全／品質注意：${j.safety.replace(/\n/g, '；')}\n`;
+            m += '\n| # | 主要步驟 | 動作要點 | 背後理由 | 風險／品質標準 |\n|---|---|---|---|---|\n';
+            j.steps.forEach((s, i) => { m += `| ${i + 1} | ${c(s.step)}${s.inferred ? ' ⚠待確認' : ''} | ${c(s.keypoints)} | ${c(s.reason)} | ${c(s.risk)} |\n`; });
+            return m;
+        },
+        toRows(j) {
+            return [['#', '主要步驟', '動作要點', '背後理由', '風險／品質標準', '待資深確認']].concat(j.steps.map((s, i) => [i + 1, s.step, s.keypoints, s.reason, s.risk, s.inferred ? 'Y' : '']));
+        },
+        toText(j) {
+            return `作業：${j.title}\n目標：${j.goal}\n` + j.steps.map((s, i) => `步驟${i + 1}：${s.step}\n  要點：${s.keypoints.replace(/\n/g, '；')}\n  理由：${s.reason}`).join('\n');
+        },
+        toXr(j) {
+            return { schema: 'zhihai.xr-checkpoints/1', job: j.title, goal: j.goal, note: '供 AR/VR 或動作辨識開發使用；tolerance 與判定門檻須由資深同仁現場校準。',
+                checkpoints: j.steps.map((s, i) => ({ seq: i + 1, action: s.step, successCriteria: splitList(s.keypoints), riskNote: s.risk,
+                    correctionVoice: `第 ${i + 1} 步「${s.step}」請注意：${s.keypoints.replace(/\n/g, '；')}${s.reason ? '。原因：' + s.reason : ''}`, tolerance: null, needsReview: !!s.inferred })) };
+        },
+        normCaps(j) {
+            const items = (Array.isArray(j.capsules) ? j.capsules : []).filter(c => c && c.title).map(c => {
+                const quiz = c.quiz && Array.isArray(c.quiz.options) && c.quiz.options.length >= 2 && Number.isInteger(c.quiz.answer) && c.quiz.answer >= 0 && c.quiz.answer < c.quiz.options.length
+                    ? { q: String(c.quiz.q || ''), options: c.quiz.options.map(String), answer: c.quiz.answer, why: String(c.quiz.why || '') } : null;
+                return { title: String(c.title), minutes: Math.min(3, Math.max(1, Number(c.minutes) || 2)), points: [].concat(c.points || []).map(String).filter(Boolean).slice(0, 5), script: String(c.script || ''), quiz };
+            });
+            if (!items.length) throw new Error('沒有有效的微教材');
+            return items;
+        }
+    };
+    window.JB = JB;
+
+    const html = `
+    <div><h2 class="text-2xl font-bold">工作分解與微教材</h2>
+    <p class="text-sm text-slate-500">給指導者：貼上流程或操作影片逐字稿，秒級產生「主要步驟／動作要點／背後理由」工作分解表，再拆成 2–3 分鐘手機微教材。AI 推測的內容會標示「待確認」，由你把關。</p></div>
+    <div class="grid lg:grid-cols-3 gap-4">
+      <div class="${card} lg:col-span-1">
+        <label class="text-sm font-semibold">① 輸入核心流程</label>
+        <select id="jb-doc" class="${inp}"></select>
+        <textarea id="jb-src" rows="10" class="${inp}" placeholder="貼上：流程描述、SOP 草稿、操作影片的逐字稿／字幕（影片請先用字幕或語音轉文字取得文字）、口述重點。"></textarea>
+        <div class="grid grid-cols-2 gap-2">
+          <input id="jb-role" class="${inp}" placeholder="職務／部門（選填）">
+          <select id="jb-level" class="${inp}"><option>完全新手</option><option>有基礎</option><option>跨部門調任</option></select>
+        </div>
+        <label class="flex items-center gap-2 text-xs text-slate-500"><input id="jb-strict" type="checkbox" checked> 嚴格模式：素材沒寫的細節標示「待確認」，不自行編造</label>
+        <div class="flex flex-wrap gap-2"><button id="jb-gen" type="button" class="${pri}"><i class="fa-solid fa-wand-magic-sparkles mr-1"></i>AI 生成工作分解表</button><button id="jb-new" type="button" class="${btn}">手動新建</button></div>
+        <div class="border-t border-slate-100 dark:border-slate-700 pt-3"><div class="text-sm font-semibold mb-2">已存工作分解表</div><div id="jb-list" class="space-y-1 text-sm"></div></div>
+      </div>
+      <div class="${card} lg:col-span-2" id="jb-editor"></div>
+    </div>
+    <div class="${card}">
+      <div class="flex flex-wrap items-center gap-2 justify-between"><div><div class="text-lg font-bold">② 微學習（Micro-learning）教材</div><div class="text-xs text-slate-500">每則約 2–3 分鐘：重點、口語講稿、1 題即時測驗。可朗讀、匯出成手機可開的單檔網頁、或送到 Podcast 工作室。</div></div></div>
+      <div class="grid md:grid-cols-4 gap-2">
+        <select id="jb-csrc" class="${inp}"><option value="job">來源：目前的工作分解表</option><option value="text">來源：員工手冊／文件</option></select>
+        <select id="jb-cdoc" class="${inp}"></select>
+        <input id="jb-coff" type="number" min="0" step="1000" value="0" class="${inp}" placeholder="從第幾字開始">
+        <select id="jb-cn" class="${inp}"><option value="3">3 則</option><option value="5" selected>5 則</option><option value="8">8 則</option></select>
+      </div>
+      <textarea id="jb-ctext" rows="4" class="${inp} hidden" placeholder="貼上手冊章節（一次建議 9000 字內；長手冊請分段，用「從第幾字開始」切換章節）"></textarea>
+      <div class="flex flex-wrap gap-2"><button id="jb-cgen" type="button" class="${pri}">AI 拆解成微教材</button>
+        <button id="jb-cexp" type="button" class="${btn}">匯出手機網頁 .html</button><button id="jb-cpc" type="button" class="${btn}">送到 Podcast</button></div>
+      <div id="jb-cview"></div>
+    </div>`;
+
+    // ---- 工作分解表編輯器 ----
+    function renderEditor() {
+        const el = q('jb-editor');
+        if (!cur) { el.innerHTML = '<div class="text-sm text-slate-400 py-10 text-center">尚未開啟工作分解表。左側貼上素材後按「AI 生成」，或「手動新建」。</div>'; return; }
+        const ta = (i, f, ph) => `<textarea data-i="${i}" data-f="${f}" rows="3" class="${inp}" placeholder="${ph}">${esc(cur.steps[i][f])}</textarea>`;
+        el.innerHTML = `
+        <div class="flex flex-wrap gap-2 items-center justify-between"><input data-h="title" value="${esc(cur.title)}" class="${inp} !w-auto flex-1 min-w-[12rem] !text-lg font-bold" placeholder="作業名稱">
+          <div class="flex flex-wrap gap-2"><button id="jb-save" type="button" class="${pri}">儲存</button><button id="jb-md" type="button" class="${btn}">.md</button><button id="jb-csv" type="button" class="${btn}">.csv</button><button id="jb-print" type="button" class="${btn}">列印版</button><button id="jb-xr" type="button" class="${btn}" title="匯出 AR/VR／動作辨識用檢核點">AR/VR 檢核點</button></div></div>
+        <div class="grid md:grid-cols-2 gap-2">
+          <div><label class="text-xs text-slate-500">作業目標</label><input data-h="goal" value="${esc(cur.goal)}" class="${inp}"></div>
+          <div><label class="text-xs text-slate-500">工具／材料（頓號分隔）</label><input data-h="tools" value="${esc(cur.tools)}" class="${inp}"></div>
+          <div><label class="text-xs text-slate-500">對應技能標籤（頓號分隔，用於技能矩陣與學習路徑）</label><input data-h="skills" value="${esc(cur.skills)}" class="${inp}"></div>
+          <div><label class="text-xs text-slate-500">安全／品質注意（每行一條）</label><textarea data-h="safety" rows="2" class="${inp}">${esc(cur.safety)}</textarea></div>
+        </div>
+        <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-xs text-slate-500"><th class="p-1 w-8">#</th><th class="p-1">主要步驟</th><th class="p-1">動作要點</th><th class="p-1">背後理由</th><th class="p-1">風險／品質標準</th><th class="p-1 w-20"></th></tr></thead><tbody>
+        ${cur.steps.map((s, i) => `<tr class="align-top ${s.inferred ? 'bg-amber-50 dark:bg-amber-900/20' : ''}"><td class="p-1 font-bold">${i + 1}</td>
+          <td class="p-1">${ta(i, 'step', '做什麼')}</td><td class="p-1">${ta(i, 'keypoints', '怎麼做才對（每行一點）')}</td><td class="p-1">${ta(i, 'reason', '為什麼這樣做')}</td><td class="p-1">${ta(i, 'risk', '做錯的後果／檢查標準')}</td>
+          <td class="p-1 whitespace-nowrap text-xs"><button data-act="up" data-i="${i}" class="px-1" title="上移">↑</button><button data-act="dn" data-i="${i}" class="px-1" title="下移">↓</button><button data-act="del" data-i="${i}" class="px-1 text-red-500" title="刪除">✕</button>
+          ${s.inferred ? `<div><label class="text-amber-600 cursor-pointer"><input type="checkbox" data-act="ok" data-i="${i}"> 已確認</label></div>` : ''}</td></tr>`).join('')}
+        </tbody></table></div>
+        <div class="flex flex-wrap gap-2 items-center"><button id="jb-add" type="button" class="${btn}">＋新增步驟</button><button id="jb-sync" type="button" class="${btn}" title="把技能標籤加入技能矩陣">同步技能到矩陣</button>
+        <span class="text-xs text-slate-400">${cur.steps.filter(s => s.inferred).length ? '⚠ 黃底列為 AI 推測，請資深同仁確認後勾選「已確認」' : ''}</span></div>`;
+    }
+    function renderList() {
+        const jobs = D().jobs;
+        q('jb-list').innerHTML = jobs.length ? jobs.map(j => `<div class="flex items-center gap-1"><button data-open="${j.id}" class="flex-1 text-left truncate hover:text-brand-500">${esc(j.title)} <span class="text-xs text-slate-400">${j.steps.length}步</span></button><button data-rm="${j.id}" class="text-red-500 text-xs px-1">✕</button></div>`).join('') : '<div class="text-xs text-slate-400">（尚無）</div>';
+    }
+    function setCur(j) { cur = j; renderEditor(); }
+
+    async function gen() {
+        const src = q('jb-src').value.trim(); if (!src) return toast('請先貼上流程或逐字稿');
+        const strict = q('jb-strict').checked;
+        const sys = '你是資深的 OJT（在職訓練）教材設計師，熟悉 TWI 工作教導法的「工作分解表」。使用繁體中文，只輸出 JSON。';
+        const prompt = `請把下列素材整理成工作分解表（Job Breakdown Sheet）。對象：${q('jb-level').value}${q('jb-role').value ? '，職務：' + q('jb-role').value : ''}。
+規則：
+1. steps 依實際作業順序，每步只含一個主要動作，建議 5–12 步。
+2. keypoints = 動作要點（做對的關鍵：順序、手法、數值、判斷訊號），陣列，每點簡短。
+3. reason = 背後理由（為何這樣做，不做會怎樣）。
+4. risk = 風險或品質檢查標準。
+5. ${strict ? '素材未明說的要點／理由，可依一般專業常識補充，但該步驟 inferred 必須設為 true；完全有依據才設 false。不得捏造具體數值、法規條號、系統名稱。' : '可適度補充常識，並將補充過的步驟 inferred 設為 true。'}
+6. skills：這項作業需要的技能標籤 2–5 個（簡短名詞）。
+輸出 JSON：{"title":"","goal":"","tools":[""],"safety":[""],"skills":[""],"steps":[{"step":"","keypoints":[""],"reason":"","risk":"","inferred":false}]}
+素材：\n"""${src.slice(0, 12000)}"""`;
+        const j = await askJSON(prompt, sys, 4096);
+        setCur(JB.norm(j)); toast('已產生，請檢查黃底待確認項目');
+    }
+
+    // ---- 微教材 ----
+    function capSource() {
+        if (q('jb-csrc').value === 'job') { if (!cur) throw new Error('請先開啟一份工作分解表'); return { text: JB.toText(cur), title: cur.title, jobId: cur.id }; }
+        const t = q('jb-ctext').value.trim(); if (!t) throw new Error('請先貼上或帶入手冊文字'); return { text: t.slice(0, 9000), title: (findDoc(q('jb-cdoc').value) || {}).name || '手冊微教材', jobId: null };
+    }
+    async function capGen() {
+        const s = capSource(), n = q('jb-cn').value;
+        const sys = '你是企業內訓的微學習（Micro-learning）設計師。繁體中文，只輸出 JSON，只根據素材，不編造素材沒有的規定或數據。';
+        const prompt = `把素材拆成 ${n} 則「膠囊式」微教材，每則閱讀／聆聽約 2–3 分鐘，單一主題、可在工作空檔用手機完成。
+每則包含：title（短標題）、minutes（2 或 3）、points（3–4 個重點，每點 ≤25 字）、script（口語講稿 300–500 字，像學長姐在旁邊教，有「為什麼」）、quiz（一題單選：q、options 4 個、answer 為 0 起算索引、why 一句解釋，必須能由素材判定對錯）。
+輸出：{"capsules":[{"title":"","minutes":2,"points":[""],"script":"","quiz":{"q":"","options":["","","",""],"answer":0,"why":""}}]}
+素材：\n"""${s.text}"""`;
+        const items = JB.normCaps(await askJSON(prompt, sys, 6000));
+        caps = { id: uid('cp_'), title: s.title + '・微教材', jobId: s.jobId, items, created: Date.now() }; capIdx = 0;
+        const d = D(); d.capsets.unshift(caps); d.capsets = d.capsets.slice(0, 30); save(); renderCaps(); toast('微教材已產生並存檔');
+    }
+    function renderCaps() {
+        const el = q('jb-cview'); if (!caps) { el.innerHTML = '<div class="text-xs text-slate-400">尚未產生。</div>'; return; }
+        const c = caps.items[capIdx];
+        el.innerHTML = `<div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 max-w-xl mx-auto space-y-2">
+          <div class="flex justify-between text-xs text-slate-500"><span>${esc(caps.title)}</span><span>${capIdx + 1} / ${caps.items.length}・約 ${c.minutes} 分鐘</span></div>
+          <div class="text-lg font-bold">${esc(c.title)}</div>
+          <ul class="list-disc pl-5 text-sm space-y-1">${c.points.map(p => `<li>${esc(p)}</li>`).join('')}</ul>
+          <p class="text-sm text-slate-600 dark:text-slate-300 whitespace-pre-wrap">${esc(c.script)}</p>
+          ${c.quiz ? `<div class="border-t border-slate-100 dark:border-slate-700 pt-2"><div class="text-sm font-semibold">${esc(c.quiz.q)}</div>${c.quiz.options.map((o, k) => `<button data-qz="${k}" class="${btn} block w-full text-left mt-1">${esc(o)}</button>`).join('')}<div id="jb-qfb" class="text-sm mt-1"></div></div>` : ''}
+          <div class="flex gap-2 justify-between pt-2"><button data-cn="-1" class="${btn}">← 上一則</button><button data-cn="speak" class="${btn}"><i class="fa-solid fa-volume-high mr-1"></i>朗讀</button><button data-cn="1" class="${btn}">下一則 →</button></div></div>`;
+    }
+    function speak(text) {
+        if (!window.speechSynthesis) return toast('此瀏覽器不支援朗讀');
+        if (speechSynthesis.speaking) return speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(text); u.lang = 'zh-TW'; const v = speechSynthesis.getVoices().find(x => /zh[-_]TW|cmn/i.test(x.lang)); if (v) u.voice = v; speechSynthesis.speak(u);
+    }
+    function capsHtml(set) {
+        const data = JSON.stringify(set).replace(/</g, '\\u003c');
+        return `<!doctype html><html lang="zh-TW"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(set.title)}</title>
+<style>body{margin:0;font-family:system-ui,"Noto Sans TC",sans-serif;background:#f1f5f9;color:#0f172a}#app{max-width:560px;margin:0 auto;padding:16px}.bar{font-size:12px;color:#64748b}h1{font-size:22px;margin:8px 0}li{margin:4px 0}.sc{color:#334155;line-height:1.8;white-space:pre-wrap}.qz{border-top:1px solid #e2e8f0;margin-top:12px;padding-top:8px}button{font:inherit;padding:10px 12px;border-radius:12px;border:1px solid #cbd5e1;background:#fff;margin:4px 0;display:block;width:100%;text-align:left}.nav{display:flex;gap:8px}.nav button{text-align:center}</style></head><body><div id="app"></div><script>
+var S=${data},i=0,A=document.getElementById('app');
+function e(t){return String(t).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function show(){var c=S.items[i],h='<div class=bar>'+S.title+'　'+(i+1)+' / '+S.items.length+'・約 '+c.minutes+' 分鐘</div><h1>'+e(c.title)+'</h1><ul>'+c.points.map(function(p){return'<li>'+e(p)+'</li>'}).join('')+'</ul><p class=sc>'+e(c.script)+'</p>';
+if(c.quiz)h+='<div class=qz><b>'+e(c.quiz.q)+'</b>'+c.quiz.options.map(function(o,k){return'<button data-k='+k+'>'+e(o)+'</button>'}).join('')+'<div id=fb></div></div>';
+h+='<div class=nav><button id=pv>上一則</button><button id=sp>朗讀</button><button id=nx>下一則</button></div>';A.innerHTML=h;
+document.getElementById('pv').onclick=function(){i=Math.max(0,i-1);show()};document.getElementById('nx').onclick=function(){i=Math.min(S.items.length-1,i+1);show()};
+document.getElementById('sp').onclick=function(){if(speechSynthesis.speaking)return speechSynthesis.cancel();var u=new SpeechSynthesisUtterance(c.script);u.lang='zh-TW';speechSynthesis.speak(u)};
+A.querySelectorAll('[data-k]').forEach(function(b){b.onclick=function(){var ok=+b.dataset.k===c.quiz.answer;document.getElementById('fb').textContent=(ok?'答對了！':'再想想。')+c.quiz.why}})}
+show();<\/script></body></html>`;
+    }
+
+    function printHtml(j) {
+        const c = t => esc(t).replace(/\n/g, '<br>');
+        return `<!doctype html><html lang="zh-TW"><head><meta charset="utf-8"><title>${esc(j.title)}</title><style>body{font-family:system-ui,"Noto Sans TC",sans-serif;margin:24px;color:#111}table{border-collapse:collapse;width:100%}th,td{border:1px solid #999;padding:6px 8px;vertical-align:top;font-size:13px}th{background:#eee}.w{background:#fff7d6}@media print{.np{display:none}}</style></head><body>
+<button class="np" onclick="print()">列印</button><h2>工作分解表：${esc(j.title)}</h2><p>目標：${esc(j.goal)}　工具／材料：${esc(j.tools)}<br>安全／品質：${c(j.safety)}<br>技能：${esc(j.skills)}</p>
+<table><tr><th>#</th><th>主要步驟</th><th>動作要點</th><th>背後理由</th><th>風險／品質標準</th></tr>${j.steps.map((s, i) => `<tr class="${s.inferred ? 'w' : ''}"><td>${i + 1}</td><td>${c(s.step)}</td><td>${c(s.keypoints)}</td><td>${c(s.reason)}</td><td>${c(s.risk)}</td></tr>`).join('')}</table>
+<p style="margin-top:24px">指導者簽名：＿＿＿＿＿　學員簽名：＿＿＿＿＿　日期：＿＿＿＿＿</p></body></html>`;
+    }
+
+    registerPlugin({
+        id: 'jbs', title: '工作分解與微教材', icon: 'fa-list-check', badge: '資深', html,
+        init() {
+            const refreshDocs = () => { q('jb-doc').innerHTML = docOptions(); q('jb-cdoc').innerHTML = docOptions(); };
+            refreshDocs(); renderList(); renderEditor(); renderCaps();
+            PLUGINS.jbs.onShow = () => { refreshDocs(); renderList(); };
+            q('jb-doc').onchange = () => { const d = findDoc(q('jb-doc').value); if (d) q('jb-src').value = d.content.slice(0, 12000); };
+            const loadDoc = () => { const d = findDoc(q('jb-cdoc').value); if (d) q('jb-ctext').value = d.content.slice(+q('jb-coff').value || 0, (+q('jb-coff').value || 0) + 9000); };
+            q('jb-cdoc').onchange = loadDoc; q('jb-coff').onchange = loadDoc;
+            q('jb-csrc').onchange = () => q('jb-ctext').classList.toggle('hidden', q('jb-csrc').value !== 'text');
+            const g = q('jb-gen'); g.onclick = busyBtn(g, '生成中…', async () => { try { await gen(); } catch (e) { toast('生成失敗：' + e.message, 7000); } });
+            q('jb-new').onclick = () => setCur(newJob());
+            const cg = q('jb-cgen'); cg.onclick = busyBtn(cg, '拆解中…', async () => { try { await capGen(); } catch (e) { toast('失敗：' + e.message, 7000); } });
+            q('jb-cexp').onclick = () => { if (!caps) return toast('請先產生微教材'); dlText(caps.title + '.html', capsHtml(caps), 'text/html'); };
+            q('jb-cpc').onclick = () => {
+                if (!caps) return toast('請先產生微教材'); const pc = q('pc-input'); if (!pc) return toast('找不到 Podcast 工作室');
+                pc.value = caps.items.map(c => `【${c.title}】\n${c.points.join('；')}\n${c.script}`).join('\n\n'); pc.dispatchEvent(new Event('input')); switchTab('podcast'); toast('已帶入 Podcast 素材');
+            };
+            q('jb-list').onclick = e => {
+                const o = e.target.closest('[data-open]'), r = e.target.closest('[data-rm]');
+                if (o) { const j = D().jobs.find(x => x.id === o.dataset.open); if (j) setCur(JSON.parse(JSON.stringify(j))); }
+                if (r && confirm('刪除這份工作分解表？')) { const d = D(); d.jobs = d.jobs.filter(x => x.id !== r.dataset.rm); if (cur && cur.id === r.dataset.rm) cur = null; save(); renderList(); renderEditor(); }
+            };
+            const ed = q('jb-editor');
+            ed.addEventListener('input', e => {
+                if (!cur) return; const t = e.target;
+                if (t.dataset.h) cur[t.dataset.h] = t.value; else if (t.dataset.f) cur.steps[+t.dataset.i][t.dataset.f] = t.value;
+            });
+            ed.addEventListener('click', e => {
+                if (!cur) return; const t = e.target.closest('button,input'); if (!t) return;
+                const i = +t.dataset.i, a = t.dataset.act, S = cur.steps;
+                if (a === 'del') { if (S.length > 1) S.splice(i, 1); renderEditor(); }
+                else if (a === 'up' && i > 0) { [S[i - 1], S[i]] = [S[i], S[i - 1]]; renderEditor(); }
+                else if (a === 'dn' && i < S.length - 1) { [S[i + 1], S[i]] = [S[i], S[i + 1]]; renderEditor(); }
+                else if (a === 'ok') { S[i].inferred = false; renderEditor(); }
+                else if (t.id === 'jb-add') { S.push({ step: '', keypoints: '', reason: '', risk: '', inferred: false }); renderEditor(); }
+                else if (t.id === 'jb-save') {
+                    if (!cur.title.trim()) return toast('請輸入作業名稱'); cur.steps = cur.steps.filter(s => s.step.trim() || s.keypoints.trim() || s.reason.trim() || s.risk.trim()); if (!cur.steps.length) return toast('至少需要一個步驟'); cur.updated = Date.now(); const d = D(), k = d.jobs.findIndex(x => x.id === cur.id);
+                    const copy = JSON.parse(JSON.stringify(cur)); if (k >= 0) d.jobs[k] = copy; else d.jobs.unshift(copy); save(); renderList(); renderEditor(); toast('已儲存');
+                }
+                else if (t.id === 'jb-md') dlText(cur.title + '_工作分解表.md', JB.toMd(cur));
+                else if (t.id === 'jb-csv') dlCsv(cur.title + '_工作分解表.csv', JB.toRows(cur));
+                else if (t.id === 'jb-print') dlText(cur.title + '_工作分解表.html', printHtml(cur), 'text/html');
+                else if (t.id === 'jb-xr') dlText(cur.title + '_xr_checkpoints.json', JSON.stringify(JB.toXr(cur), null, 2), 'application/json');
+                else if (t.id === 'jb-sync') {
+                    const mx = D().mx; let n = 0; splitList(cur.skills).forEach(s => { if (!mx.skills.some(k => k.name === s)) { mx.skills.push({ id: uid('sk_'), name: s, target: 3 }); n++; } });
+                    save(); toast(n ? `已新增 ${n} 項技能到矩陣` : '技能已都在矩陣中');
+                }
+            });
+            q('jb-cview').addEventListener('click', e => {
+                const t = e.target.closest('button'); if (!t || !caps) return;
+                if (t.dataset.cn === 'speak') return speak(caps.items[capIdx].script);
+                if (t.dataset.cn) { capIdx = Math.min(caps.items.length - 1, Math.max(0, capIdx + Number(t.dataset.cn))); speechSynthesis && speechSynthesis.cancel(); renderCaps(); }
+                if (t.dataset.qz != null) { const c = caps.items[capIdx]; const ok = +t.dataset.qz === c.quiz.answer; q('jb-qfb').innerHTML = (ok ? '✅ 答對了！' : '❌ 再想想。') + esc(c.quiz.why); }
+            });
+        }
+    });
+})();
+
+// ===== 外掛 2/3：助教問答庫（資深把關）＋ 情境演練 =====
+(function () {
+    const { q, esc, uid, D, save, splitList, askJSON, cls, busyBtn } = OJT;
+    const { inp, btn, pri, card } = cls;
+
+    const BUILTIN = [
+        { id: 'b1', name: '刁鑽客戶（客服／業務）', persona: '你是一位挑剔、愛比價、會反覆質疑說法並要求特例的客戶。不會輕易被說服；但若對方展現同理並給出具體可行的方案，態度會逐步軟化。', goal: '在不違反規定的前提下化解疑慮並完成服務', rubric: ['同理與傾聽', '資訊正確具體', '處理異議', '語氣專業', '結案與後續行動'] },
+        { id: 'b2', name: '憤怒投訴者', persona: '你是一位因為服務出錯而非常生氣的客戶，一開始情緒激動、語氣急。對方若先道歉並釐清問題再提解法，你才會冷靜；若被敷衍或推責，你會升高情緒。', goal: '安撫情緒、釐清事實、提出補救並確認客戶接受', rubric: ['先安撫情緒', '釐清事實', '不推責', '提出具體補救', '確認客戶接受'] },
+        { id: 'b3', name: '應徵者（學員擔任面試官）', persona: '你是一位應徵者。回答有時籠統、有時前後略有矛盾，需要面試官追問才會給出具體事例。你不主動透露缺點。', goal: '透過結構化提問評估應徵者，並遵守公平與法規', rubric: ['結構化提問（STAR）', '追問深度', '避免不當提問', '傾聽與回應', '時間與流程掌控']},
+        { id: 'b4', name: '焦慮的新進同事（學員擔任帶領者）', persona: '你是剛到職的新人，對工作很緊張，容易說「我是不是做錯了」，不太敢主動求助，也聽不太懂專有名詞。', goal: '用清楚、不責備的方式教導並建立信心', rubric: ['說明清楚', '確認理解', '給予鼓勵', '示範而非只說', '引導自己解決']}
+    ];
+    const allScen = () => BUILTIN.concat(D().scenarios);
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let msgs = [], scen = null, started = false, rec = null, result = null;
+
+    // ---- 純函式 ----
+    const CO = {
+        retrieve(query, faq, docs) {
+            const qb = bigrams(query); if (!qb.size) return [];
+            const src = faq.map(f => ({ name: '資深確認 FAQ', content: `Q：${f.q}\nA：${f.a}`, boost: 3 })).concat(docs.filter(d => d.content).map(d => ({ name: d.name, content: d.content, boost: 1 })));
+            const c = [];
+            src.forEach(d => chunkText(d.content, 800).forEach(t => { const b = bigrams(t); let s = 0; qb.forEach(g => { if (b.has(g)) s++; }); if (s > 1) c.push({ name: d.name, text: t, score: s * d.boost }); }));
+            return c.sort((a, b) => b.score - a.score).slice(0, 5);
+        },
+        total(dims) { const v = dims.filter(d => Number.isFinite(d.score)); return v.length ? Math.round(v.reduce((a, d) => a + d.score, 0) / v.length * 20) : 0; },
+        normScore(j, rubric) {
+            const dims = (Array.isArray(j.dims) ? j.dims : []).map(d => ({ name: String(d.name || ''), score: Math.min(5, Math.max(1, Math.round(Number(d.score)))), comment: String(d.comment || '') })).filter(d => d.name && Number.isFinite(d.score));
+            if (!dims.length) throw new Error('評分格式不正確');
+            return { dims, total: CO.total(dims), strengths: [].concat(j.strengths || []).map(String), improvements: [].concat(j.improvements || []).map(String),
+                rewrites: (Array.isArray(j.rewrites) ? j.rewrites : []).filter(r => r && r.said && r.better).map(r => ({ said: String(r.said), better: String(r.better) })).slice(0, 4) };
+        }
+    };
+    window.CO = CO;
+
+    const html = `
+    <div><h2 class="text-2xl font-bold">助教問答庫與情境演練</h2>
+    <p class="text-sm text-slate-500">讓新人先問 AI 助教、AI 答不出的才轉給你；你的回覆累積成「資深確認 FAQ」。溝通型職務可用 AI 角色扮演演練並評分，成績可寫入技能矩陣。</p></div>
+    <div class="flex gap-2"><button id="co-t1" type="button" class="${pri}">助教問答庫</button><button id="co-t2" type="button" class="${btn}">情境演練</button></div>
+
+    <div id="co-p1" class="grid lg:grid-cols-2 gap-4">
+      <div class="${card}">
+        <div class="text-lg font-bold">新人提問（AI 助教）</div>
+        <div class="text-xs text-slate-500">只依「已匯入的教材＋資深確認 FAQ」回答並標出處；沒有依據就不亂答，改送資深待辦。</div>
+        <input id="co-asker" class="${inp}" placeholder="提問者姓名（選填）">
+        <textarea id="co-q" rows="3" class="${inp}" placeholder="例如：客戶要求退費超過 7 天，該怎麼處理？"></textarea>
+        <button id="co-ask" type="button" class="${pri}">問助教</button>
+        <div id="co-ans" class="text-sm whitespace-pre-wrap"></div>
+      </div>
+      <div class="${card}">
+        <div class="flex items-center justify-between"><div class="text-lg font-bold">資深待辦 <span id="co-nin" class="text-xs bg-amber-400 text-amber-950 rounded px-1.5"></span></div><div class="flex gap-1"><button id="co-faq-md" type="button" class="${btn}">匯出 FAQ</button></div></div>
+        <div id="co-inbox" class="space-y-3 text-sm"></div>
+        <details class="border-t border-slate-100 dark:border-slate-700 pt-3"><summary class="cursor-pointer text-sm font-semibold">資深確認 FAQ（<span id="co-nfaq">0</span>）</summary><div id="co-faq" class="space-y-2 text-sm mt-2"></div>
+          <div class="mt-2 space-y-1"><input id="co-nq" class="${inp}" placeholder="手動新增：問題"><textarea id="co-na" rows="2" class="${inp}" placeholder="標準答案"></textarea><button id="co-nadd" type="button" class="${btn}">加入 FAQ</button></div></details>
+      </div>
+    </div>
+
+    <div id="co-p2" class="hidden grid lg:grid-cols-3 gap-4">
+      <div class="${card} lg:col-span-1">
+        <div class="text-lg font-bold">演練設定</div>
+        <select id="co-sc" class="${inp}"></select>
+        <div class="text-xs text-slate-500" id="co-scinfo"></div>
+        <label class="text-xs text-slate-500">難度</label><select id="co-diff" class="${inp}"><option value="1">1 溫和</option><option value="2" selected>2 標準</option><option value="3">3 高壓</option></select>
+        <div class="grid grid-cols-2 gap-2"><select id="co-who" class="${inp}"></select><select id="co-sk" class="${inp}"></select></div>
+        <div class="text-[11px] text-slate-400">選填：學員與對應技能；存檔時會把分數寫入技能矩陣的證據紀錄。</div>
+        <label class="flex items-center gap-2 text-xs"><input id="co-tts" type="checkbox"> AI 開口時朗讀</label>
+        <div class="flex gap-2"><button id="co-start" type="button" class="${pri}">開始演練</button><button id="co-end" type="button" class="${btn}">結束並評分</button></div>
+        <details class="border-t border-slate-100 dark:border-slate-700 pt-2"><summary class="cursor-pointer text-sm font-semibold">自訂情境</summary><div class="space-y-1 mt-2">
+          <input id="co-cn" class="${inp}" placeholder="情境名稱"><textarea id="co-cp" rows="3" class="${inp}" placeholder="AI 扮演的角色與性格、背景"></textarea>
+          <input id="co-cg" class="${inp}" placeholder="學員要達成的目標"><input id="co-cr" class="${inp}" placeholder="評分面向（頓號分隔，3–6 項）"><button id="co-cadd" type="button" class="${btn}">儲存情境</button></div></details>
+        <div class="border-t border-slate-100 dark:border-slate-700 pt-2"><div class="text-sm font-semibold">演練紀錄</div><div id="co-hist" class="text-xs space-y-1 mt-1"></div></div>
+      </div>
+      <div class="${card} lg:col-span-2">
+        <div id="co-chat" class="h-80 overflow-y-auto space-y-2 text-sm rounded-xl bg-slate-50 dark:bg-slate-800/50 p-3"></div>
+        <div class="flex gap-2"><textarea id="co-in" rows="2" class="${inp}" placeholder="輸入你的回應（Enter 送出，Shift+Enter 換行）"></textarea>
+          <div class="flex flex-col gap-1"><button id="co-send" type="button" class="${pri}">送出</button><button id="co-mic" type="button" class="${btn}" title="語音輸入"><i class="fa-solid fa-microphone"></i></button></div></div>
+        <div id="co-res"></div>
+      </div>
+    </div>`;
+
+    // ---- 助教問答庫 ----
+    function renderQA() {
+        const d = D();
+        q('co-nin').textContent = d.inbox.length || ''; q('co-nfaq').textContent = d.faq.length;
+        q('co-inbox').innerHTML = d.inbox.length ? d.inbox.map(x => `<div class="rounded-xl border border-slate-200 dark:border-slate-700 p-3 space-y-1" data-id="${x.id}">
+          <div class="font-semibold">Q：${esc(x.q)}</div><div class="text-xs text-slate-400">${esc(x.asker || '匿名')}・${new Date(x.date).toLocaleString('zh-TW')}</div>
+          <textarea rows="3" class="${inp}" placeholder="你的標準答案">${esc(x.draft || '')}</textarea>
+          <div class="flex gap-1"><button data-a="pub" class="${pri} !py-1">發佈到 FAQ</button><button data-a="draft" class="${btn} !py-1">AI 草擬（需你修改）</button><button data-a="rm" class="${btn} !py-1 text-red-500">略過</button></div></div>`).join('') : '<div class="text-xs text-slate-400">目前沒有待回覆的問題 🎉</div>';
+        q('co-faq').innerHTML = d.faq.map(f => `<div class="rounded-lg bg-slate-50 dark:bg-slate-800/50 p-2"><div class="font-semibold">Q：${esc(f.q)} <button data-fd="${f.id}" class="text-red-500 text-xs float-right">刪除</button></div><div class="whitespace-pre-wrap">A：${esc(f.a)}</div></div>`).join('') || '<div class="text-xs text-slate-400">（尚無）</div>';
+    }
+    async function ask() {
+        const text = q('co-q').value.trim(); if (!text) return toast('請輸入問題');
+        const d = D(), ctx = CO.retrieve(text, d.faq, appData.documents || []);
+        const out = q('co-ans');
+        const toInbox = () => { d.inbox.unshift({ id: uid('qi_'), q: text, asker: q('co-asker').value.trim(), date: Date.now() }); save(); renderQA(); };
+        if (!ctx.length) { toInbox(); out.textContent = '📭 知識庫裡找不到相關依據，已轉給資深同仁，確認後會加入 FAQ。'; return; }
+        const sys = '你是企業內部的新人助教。只能依據提供的片段回答，使用繁體中文；片段不足就老實說無法回答，不可用常識補充公司規定、數值或法規。只輸出 JSON。';
+        const prompt = `問題：${text}\n\n可用片段：\n${ctx.map((c, i) => `[${i + 1}] 《${c.name}》\n${c.text}`).join('\n\n')}\n\n輸出：{"covered":true或false,"answer":"回答（簡潔，必要時列步驟）","sources":["引用的片段編號或檔名"]}\ncovered 只有在片段能直接回答時才為 true。`;
+        const j = await askJSON(prompt, sys, 1500);
+        if (!j.covered) { toInbox(); out.textContent = '📭 現有資料不足以確定答案，已轉給資深同仁確認。' + (j.answer ? '\n\n（僅供參考，未經確認）\n' + j.answer : ''); return; }
+        out.innerHTML = `<div class="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 p-3">${esc(j.answer).replace(/\n/g, '<br>')}</div><div class="text-xs text-slate-500 mt-1">出處：${esc(ctx.map(c => c.name).filter((v, i, a) => a.indexOf(v) === i).join('、'))}</div>`;
+    }
+
+    // ---- 情境演練 ----
+    function fillSelects() {
+        const sc = q('co-sc'), v = sc.value; sc.innerHTML = allScen().map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join(''); if (v) sc.value = v;
+        const mx = D().mx;
+        q('co-who').innerHTML = '<option value="">學員（選填）</option>' + mx.people.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+        q('co-sk').innerHTML = '<option value="">對應技能（選填）</option>' + mx.skills.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+        showInfo(); renderHist();
+    }
+    function showInfo() { const s = allScen().find(x => x.id === q('co-sc').value); q('co-scinfo').innerHTML = s ? `目標：${esc(s.goal)}<br>評分：${esc(s.rubric.join('、'))}` : ''; }
+    function bubble(role, text) {
+        const c = q('co-chat'), d = document.createElement('div');
+        d.className = role === 'user' ? 'ml-auto max-w-[85%] rounded-2xl bg-brand-500 text-white px-3 py-2 w-fit' : 'mr-auto max-w-[85%] rounded-2xl bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-3 py-2 w-fit';
+        d.textContent = text; c.appendChild(d); c.scrollTop = c.scrollHeight; return d;
+    }
+    function sysPrompt() {
+        const lv = { 1: '態度溫和，願意配合。', 2: '態度一般偏挑剔，需要對方展現專業才讓步。', 3: '高壓：情緒強烈、設下難題、不輕易讓步。' }[q('co-diff').value];
+        return `你正在進行企業內訓的角色扮演，你扮演：${scen.persona}\n難度：${lv}\n學員的任務：${scen.goal}\n規則：全程維持角色，用繁體中文口語，每次回覆 1–3 句；不要替學員作答或給建議；不要提到你在評分；真實事件細節不要編造公司的具體政策數字，可模糊帶過或反問。`;
+    }
+    async function start() {
+        scen = allScen().find(s => s.id === q('co-sc').value); if (!scen) return;
+        msgs = [{ role: 'user', content: '（演練開始，請你以角色身分先開口。）' }]; started = true; result = null; q('co-chat').innerHTML = ''; q('co-res').innerHTML = '';
+        const r = await callLLM(msgs, getActiveConn(), { system: sysPrompt(), maxTokens: 400 });
+        msgs.push({ role: 'assistant', content: r }); bubble('ai', r); say(r);
+    }
+    function say(t) { if (q('co-tts').checked && window.speechSynthesis) { const u = new SpeechSynthesisUtterance(t); u.lang = 'zh-TW'; speechSynthesis.speak(u); } }
+    async function send() {
+        if (!started) return toast('請先按「開始演練」');
+        const t = q('co-in').value.trim(); if (!t) return; q('co-in').value = '';
+        msgs.push({ role: 'user', content: t }); bubble('user', t);
+        const p = bubble('ai', '…');
+        try { const r = await callLLM(msgs.slice(-24), getActiveConn(), { system: sysPrompt(), maxTokens: 400 }); msgs.push({ role: 'assistant', content: r }); p.textContent = r; say(r); }
+        catch (e) { msgs.pop(); p.textContent = '連線失敗：' + e.message; }
+    }
+    async function finish() {
+        if (!started || msgs.filter(m => m.role === 'user').length < 3) return toast('至少要對話 2 個來回才能評分');
+        const tr = msgs.slice(1).map(m => (m.role === 'user' ? '學員：' : scen.name + '：') + m.content).join('\n');
+        const sys = '你是嚴謹但鼓勵人的溝通教練。評分必須有對話中的實際證據，不能憑印象；繁體中文；只輸出 JSON。';
+        const prompt = `情境：${scen.name}\n學員任務：${scen.goal}\n評分面向（各 1–5 分，3 分為合格）：${scen.rubric.join('、')}\n\n對話逐字稿：\n${tr}\n\n輸出：{"dims":[{"name":"面向","score":1到5整數,"comment":"引用學員原話說明理由"}],"strengths":["…"],"improvements":["…"],"rewrites":[{"said":"學員原話","better":"建議說法"}]}\nrewrites 最多 3 組。`;
+        result = CO.normScore(await askJSON(prompt, sys, 2500), scen.rubric); started = false;
+        q('co-res').innerHTML = `<div class="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-2 mt-2">
+          <div class="flex items-baseline gap-3"><div class="text-3xl font-bold ${result.total >= 60 ? 'text-emerald-600' : 'text-red-500'}">${result.total}</div><div class="text-sm text-slate-500">/ 100　${esc(scen.name)}</div></div>
+          ${result.dims.map(d => `<div class="text-sm"><b>${esc(d.name)}</b> ${'★'.repeat(d.score)}${'☆'.repeat(5 - d.score)}<div class="text-slate-500">${esc(d.comment)}</div></div>`).join('')}
+          ${result.strengths.length ? `<div class="text-sm"><b>做得好</b><ul class="list-disc pl-5">${result.strengths.map(s => `<li>${esc(s)}</li>`).join('')}</ul></div>` : ''}
+          ${result.improvements.length ? `<div class="text-sm"><b>可加強</b><ul class="list-disc pl-5">${result.improvements.map(s => `<li>${esc(s)}</li>`).join('')}</ul></div>` : ''}
+          ${result.rewrites.map(r => `<div class="text-sm rounded-lg bg-slate-50 dark:bg-slate-800/50 p-2">你說：${esc(r.said)}<br>建議：<b>${esc(r.better)}</b></div>`).join('')}
+          <button id="co-saves" type="button" class="${pri}">存入演練紀錄</button></div>`;
+        q('co-saves').onclick = saveSession;
+    }
+    function saveSession() {
+        if (!result) return; const d = D(), pid = q('co-who').value, sid = q('co-sk').value;
+        d.sessions.unshift({ id: uid('ss_'), scenario: scen.name, personId: pid, skillId: sid, total: result.total, dims: result.dims, date: Date.now() });
+        if (pid && sid) d.mx.evidence.unshift({ id: uid('ev_'), personId: pid, skillId: sid, text: `情境演練「${scen.name}」${result.total} 分`, score: result.total, date: Date.now(), src: 'roleplay' });
+        d.sessions = d.sessions.slice(0, 100); save(); renderHist(); q('co-saves').disabled = true; toast(pid && sid ? '已存檔，並寫入技能矩陣證據' : '已存檔');
+    }
+    function renderHist() {
+        const d = D(), nm = id => (d.mx.people.find(p => p.id === id) || {}).name || '';
+        q('co-hist').innerHTML = d.sessions.slice(0, 8).map(s => `<div>${new Date(s.date).toLocaleDateString('zh-TW')}・${esc(s.scenario)}${nm(s.personId) ? '・' + esc(nm(s.personId)) : ''}：<b>${s.total}</b></div>`).join('') || '（尚無）';
+    }
+    function mic() {
+        if (!SR) return toast('此瀏覽器不支援語音輸入，請改用 Chrome／Edge／Safari');
+        if (rec) { rec.stop(); return; }
+        rec = new SR(); rec.lang = 'zh-TW'; rec.interimResults = false; rec.onresult = e => { q('co-in').value += Array.from(e.results).map(r => r[0].transcript).join(''); };
+        rec.onend = () => { rec = null; q('co-mic').classList.remove('bg-red-100'); }; rec.onerror = () => { rec = null; }; q('co-mic').classList.add('bg-red-100'); rec.start();
+    }
+
+    registerPlugin({
+        id: 'coach', title: '助教問答與情境演練', icon: 'fa-user-graduate', badge: '資深', html,
+        init() {
+            const tab = n => { q('co-p1').classList.toggle('hidden', n !== 1); q('co-p2').classList.toggle('hidden', n !== 2); q('co-t1').className = n === 1 ? pri : btn; q('co-t2').className = n === 2 ? pri : btn; };
+            q('co-t1').onclick = () => tab(1); q('co-t2').onclick = () => tab(2);
+            PLUGINS.coach.onShow = () => { fillSelects(); renderQA(); };
+            fillSelects(); renderQA(); q('co-sc').onchange = showInfo;
+            const a = q('co-ask'); a.onclick = busyBtn(a, '查詢中…', async () => { try { await ask(); } catch (e) { toast('失敗：' + e.message, 7000); } });
+            q('co-nadd').onclick = () => { const x = q('co-nq').value.trim(), y = q('co-na').value.trim(); if (!x || !y) return toast('請填問題與答案'); D().faq.unshift({ id: uid('fq_'), q: x, a: y, date: Date.now() }); save(); q('co-nq').value = q('co-na').value = ''; renderQA(); };
+            q('co-faq-md').onclick = () => { const f = D().faq; if (!f.length) return toast('FAQ 是空的'); dlText('資深確認FAQ.md', '# 資深確認 FAQ\n\n' + f.map(x => `## ${x.q}\n\n${x.a}\n`).join('\n')); };
+            q('co-faq').onclick = e => { const b = e.target.closest('[data-fd]'); if (b && confirm('刪除此 FAQ？')) { const d = D(); d.faq = d.faq.filter(x => x.id !== b.dataset.fd); save(); renderQA(); } };
+            q('co-inbox').onclick = async e => {
+                const b = e.target.closest('[data-a]'); if (!b) return; const box = b.closest('[data-id]'), d = D(), it = d.inbox.find(x => x.id === box.dataset.id), ta = box.querySelector('textarea'); if (!it) return;
+                if (b.dataset.a === 'rm') { d.inbox = d.inbox.filter(x => x !== it); save(); renderQA(); }
+                else if (b.dataset.a === 'pub') { const t = ta.value.trim(); if (!t) return toast('請先填寫答案'); d.faq.unshift({ id: uid('fq_'), q: it.q, a: t, date: Date.now() }); d.inbox = d.inbox.filter(x => x !== it); save(); renderQA(); toast('已加入 FAQ，之後的提問會優先引用'); }
+                else if (b.dataset.a === 'draft') { b.disabled = true; try { ta.value = await callLLM([{ role: 'user', content: `請替資深同仁草擬一段簡潔的標準回答（要點式），問題：${it.q}\n注意：你不知道本公司細節，請在不確定處標記【請資深補充】，不要編造規定或數字。` }], getActiveConn(), { system: '你是協助資深同仁撰寫 FAQ 的助理，繁體中文。', maxTokens: 800 }); it.draft = ta.value; save(); } catch (er) { toast('失敗：' + er.message, 6000); } b.disabled = false; }
+            };
+            const st = q('co-start'); st.onclick = busyBtn(st, '準備中…', async () => { try { await start(); } catch (e) { toast('失敗：' + e.message, 7000); } });
+            const en = q('co-end'); en.onclick = busyBtn(en, '評分中…', async () => { try { await finish(); } catch (e) { toast('評分失敗：' + e.message, 7000); } });
+            q('co-send').onclick = send; q('co-mic').onclick = mic;
+            q('co-in').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); } });
+            q('co-cadd').onclick = () => {
+                const n = q('co-cn').value.trim(), p = q('co-cp').value.trim(), r = splitList(q('co-cr').value); if (!n || !p || r.length < 2) return toast('請填名稱、角色描述與至少 2 個評分面向');
+                D().scenarios.push({ id: uid('sc_'), name: n, persona: p, goal: q('co-cg').value.trim() || '完成溝通目標', rubric: r }); save(); fillSelects(); toast('情境已儲存');
+            };
+        }
+    });
+})();
+
+// ===== 外掛 3/3：技能矩陣與動態學習地圖 =====
+(function () {
+    const { q, esc, uid, D, save, splitList, askJSON, cls, busyBtn, dlCsv } = OJT;
+    const { inp, btn, pri, card } = cls;
+    const LV = ['未接觸', '學習中', '指導下可做', '可獨立作業', '可指導他人'];
+    const COL = ['#e2e8f0', '#fde68a', '#bef264', '#4ade80', '#16a34a'];
+    const key = (p, s) => p + '|' + s;
+
+    // ---- 純函式（可獨立測試）----
+    const MX = {
+        level(mx, p, s) { return Number(mx.cells[key(p, s)]) || 0; },
+        // 技能覆蓋：具備者(≥3)不足 2 人即單點風險
+        coverage(mx, minLv = 3) { return mx.skills.map(s => { const who = mx.people.filter(p => MX.level(mx, p.id, s.id) >= minLv); return { skill: s, who, risk: who.length < 2 }; }); },
+        multi(mx, th = 3) { return mx.people.map(p => ({ person: p, n: mx.skills.filter(s => MX.level(mx, p.id, s.id) >= 3).length })).map(x => ({ ...x, is: x.n >= th })); },
+        gaps(mx, pid) { return mx.skills.map(s => ({ skill: s, lv: MX.level(mx, pid, s.id), gap: (s.target || 3) - MX.level(mx, pid, s.id) })).filter(g => g.gap > 0).sort((a, b) => b.gap - a.gap); },
+        mentors(mx, pid, sid) { const all = mx.people.filter(p => p.id !== pid).map(p => ({ p, l: MX.level(mx, p.id, sid) })); const top = all.filter(x => x.l >= 4); return (top.length ? top : all.filter(x => x.l === 3)).map(x => x.p); },
+        rate(mx) { if (!mx.people.length || !mx.skills.length) return 0; let a = 0, b = 0; mx.people.forEach(p => mx.skills.forEach(s => { const t = s.target || 3; a += Math.min(MX.level(mx, p.id, s.id), t); b += t; })); return Math.round(a / b * 100); },
+        matchJobs(jobs, skillName) { return jobs.filter(j => splitList(j.skills).some(t => t === skillName || t.includes(skillName) || skillName.includes(t))); },
+        // 把 AI 建議對應回矩陣（姓名／技能名比對，找不到的丟棄）
+        mapUpdates(mx, list) {
+            const out = [];
+            (Array.isArray(list) ? list : []).forEach(u => {
+                const p = mx.people.find(x => x.name === String(u.person || '').trim()), s = mx.skills.find(x => x.name === String(u.skill || '').trim()), to = Math.round(Number(u.to));
+                if (!p || !s || !(to >= 0 && to <= 4)) return; const from = MX.level(mx, p.id, s.id); if (from === to) return;
+                out.push({ pid: p.id, sid: s.id, pn: p.name, sn: s.name, from, to, reason: String(u.reason || '') });
+            }); return out;
+        }
+    };
+    window.MX = MX;
+
+    let sugg = [], plan = null;
+
+    const html = `
+    <div><h2 class="text-2xl font-bold">技能矩陣與學習地圖</h2>
+    <p class="text-sm text-slate-500">主管／資深一眼看出誰是多能工、哪些技能只有一個人會（單點風險）、誰該補哪一塊；AI 依考核與表現紀錄提出「調整建議」，由你確認後才更新。</p></div>
+    <div id="mx-kpi" class="grid grid-cols-2 md:grid-cols-5 gap-3"></div>
+    <div class="${card}">
+      <div class="flex flex-wrap gap-2 items-end">
+        <input id="mx-pn" class="${inp} !w-36" placeholder="人員姓名"><input id="mx-pr" class="${inp} !w-32" placeholder="職務"><button id="mx-padd" type="button" class="${btn}">＋人員</button>
+        <input id="mx-sn" class="${inp} !w-44" placeholder="技能名稱"><select id="mx-st" class="${inp} !w-28"><option value="2">目標 Lv2</option><option value="3" selected>目標 Lv3</option><option value="4">目標 Lv4</option></select><button id="mx-sadd" type="button" class="${btn}">＋技能</button>
+        <button id="mx-fromjb" type="button" class="${btn}">從工作分解表匯入技能</button><button id="mx-csv" type="button" class="${btn}">匯出 CSV</button>
+        <label class="text-xs text-slate-500 ml-auto">多能工門檻 <input id="mx-th" type="number" min="1" value="3" class="${inp} !w-14 !inline-block"> 項 Lv3+</label>
+      </div>
+      <div class="text-xs text-slate-500">點儲存格切換等級：${LV.map((l, i) => `<span class="inline-block px-1.5 rounded" style="background:${COL[i]}">${i} ${l}</span>`).join(' ')}</div>
+      <div id="mx-tbl" class="overflow-x-auto"></div>
+    </div>
+    <div class="grid lg:grid-cols-2 gap-4">
+      <div class="${card}">
+        <div class="text-lg font-bold">AI 熟練度更新建議</div>
+        <div class="text-xs text-slate-500">貼上考核結果、專案表現、主管觀察。AI 只提出建議與理由，每次最多調 ±1 級，需你逐項確認。</div>
+        <textarea id="mx-ev" rows="5" class="${inp}" placeholder="例如：小明本月 CRM 工單平均處理 12 分鐘，高於組平均 7 分鐘；但獨立完成了兩次客訴結案…"></textarea>
+        <button id="mx-ai" type="button" class="${pri}">分析並提出建議</button><div id="mx-sg" class="space-y-1 text-sm"></div>
+        <details class="border-t border-slate-100 dark:border-slate-700 pt-2"><summary class="cursor-pointer text-sm font-semibold">證據紀錄（<span id="mx-nev">0</span>）</summary><div id="mx-evl" class="text-xs space-y-1 mt-1 max-h-48 overflow-y-auto"></div></details>
+      </div>
+      <div class="${card}">
+        <div class="text-lg font-bold">個人學習地圖</div>
+        <select id="mx-who" class="${inp}"></select>
+        <textarea id="mx-obs" rows="2" class="${inp}" placeholder="（選填）前測成績／日常表現觀察，例如：CRM 登錄速度偏慢"></textarea>
+        <div class="flex gap-2"><button id="mx-path" type="button" class="${pri}">產生學習地圖</button><button id="mx-aipath" type="button" class="${btn}">AI 排優先順序與週次</button></div>
+        <div id="mx-pv" class="space-y-2 text-sm"></div>
+      </div>
+    </div>`;
+
+    function render() {
+        const mx = D().mx, th = Math.max(1, +q('mx-th').value || 3), cov = MX.coverage(mx), multi = MX.multi(mx, th);
+        q('mx-kpi').innerHTML = [['人員', mx.people.length], ['技能項目', mx.skills.length], ['平均達成率', MX.rate(mx) + '%'], ['多能工', multi.filter(x => x.is).length + ' 人'], ['單點風險技能', cov.filter(c => c.risk).length + ' 項']]
+            .map(([a, b], i) => `<div class="custom-card rounded-2xl border border-slate-200 dark:border-slate-700 p-3"><div class="text-xs text-slate-500">${a}</div><div class="text-2xl font-bold ${i === 4 && cov.some(c => c.risk) ? 'text-red-500' : ''}">${b}</div></div>`).join('');
+        if (!mx.people.length || !mx.skills.length) { q('mx-tbl').innerHTML = '<div class="text-sm text-slate-400 py-6 text-center">請先新增人員與技能（或從工作分解表匯入技能）。</div>'; }
+        else q('mx-tbl').innerHTML = `<table class="text-sm border-separate border-spacing-1"><thead><tr><th></th>${mx.skills.map(s => `<th class="text-xs font-semibold px-1 align-bottom"><div class="max-w-[5.5rem] break-words">${esc(s.name)}</div><div class="text-[10px] text-slate-400 font-normal">目標${s.target || 3} <button data-rs="${s.id}" class="text-red-400">✕</button></div></th>`).join('')}<th class="text-xs">多能</th></tr></thead><tbody>
+          ${mx.people.map(p => `<tr><th class="text-left text-sm font-semibold pr-2 whitespace-nowrap">${esc(p.name)}<span class="text-[10px] text-slate-400"> ${esc(p.role || '')}</span> <button data-rp="${p.id}" class="text-red-400 text-xs">✕</button></th>
+            ${mx.skills.map(s => { const l = MX.level(mx, p.id, s.id), low = l < (s.target || 3); return `<td><button data-c="${key(p.id, s.id)}" class="w-12 h-9 rounded-lg font-bold ${l >= 3 ? 'text-white' : 'text-slate-700'} ${low ? 'ring-1 ring-red-300' : ''}" style="background:${COL[l]}" title="${esc(p.name)}・${esc(s.name)}：${LV[l]}">${l}</button></td>`; }).join('')}
+            <td class="text-center">${multi.find(x => x.person.id === p.id).is ? '<span class="text-xs font-bold bg-emerald-500 text-white rounded px-1.5">多能工</span>' : `<span class="text-xs text-slate-400">${multi.find(x => x.person.id === p.id).n}</span>`}</td></tr>`).join('')}
+          <tr><th class="text-left text-xs text-slate-500">Lv3+ 人數</th>${cov.map(c => `<td class="text-center text-xs font-bold ${c.risk ? 'text-red-500' : ''}" title="${esc(c.who.map(p => p.name).join('、'))}">${c.who.length}${c.risk ? '<div class="text-[10px] font-normal">⚠單點</div>' : ''}</td>`).join('')}<td></td></tr></tbody></table>`;
+        const ws = q('mx-who'), v = ws.value; ws.innerHTML = '<option value="">選擇人員</option>' + mx.people.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join(''); ws.value = v;
+        const ev = mx.evidence; q('mx-nev').textContent = ev.length;
+        q('mx-evl').innerHTML = ev.slice(0, 40).map(e => `<div>${new Date(e.date).toLocaleDateString('zh-TW')}・${esc((mx.people.find(p => p.id === e.personId) || {}).name || '')}・${esc((mx.skills.find(s => s.id === e.skillId) || {}).name || '')}：${esc(e.text)}</div>`).join('') || '（尚無）';
+    }
+    function renderSugg() {
+        q('mx-sg').innerHTML = sugg.length ? sugg.map((u, i) => `<label class="flex gap-2 items-start rounded-lg bg-slate-50 dark:bg-slate-800/50 p-2"><input type="checkbox" data-s="${i}" checked class="mt-1"><span><b>${esc(u.pn)}</b>・${esc(u.sn)}：Lv${u.from} → <b>Lv${u.to}</b><br><span class="text-xs text-slate-500">${esc(u.reason)}</span></span></label>`).join('') + `<button id="mx-apply" type="button" class="${pri} mt-1">套用勾選的調整</button>` : '';
+    }
+    async function analyze() {
+        const mx = D().mx, ev = q('mx-ev').value.trim(); if (!ev) return toast('請貼上考核或表現紀錄'); if (!mx.people.length || !mx.skills.length) return toast('請先建立人員與技能');
+        const cur = mx.people.map(p => `${p.name}：` + mx.skills.map(s => `${s.name}=${MX.level(mx, p.id, s.id)}`).join('、')).join('\n');
+        const sys = '你是人才發展分析師，只能依使用者提供的紀錄判斷，證據不足就不要調整。繁體中文，只輸出 JSON。';
+        const prompt = `等級定義：0未接觸、1學習中、2指導下可做、3可獨立作業、4可指導他人。\n目前矩陣：\n${cur}\n\n新的考核／表現紀錄：\n"""${ev.slice(0, 6000)}"""\n\n規則：person 與 skill 必須與上面名稱完全一致；每項調整幅度最多 ±1 級；reason 必須引用紀錄中的具體內容；紀錄沒提到的人與技能不要動。\n輸出：{"updates":[{"person":"","skill":"","to":0到4整數,"reason":""}]}`;
+        const j = await askJSON(prompt, sys, 2000); sugg = MX.mapUpdates(mx, j.updates).filter(u => Math.abs(u.to - u.from) <= 1);
+        if (!sugg.length) toast('AI 沒有找到足夠證據可調整的項目'); renderSugg();
+        sugg._ev = ev;
+    }
+    function pathView() {
+        const mx = D().mx, pid = q('mx-who').value; if (!pid) return toast('請選擇人員');
+        const g = MX.gaps(mx, pid), jobs = D().jobs, me = mx.people.find(p => p.id === pid);
+        if (!g.length) { q('mx-pv').innerHTML = `<div class="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 p-3">🎉 ${esc(me.name)} 已達成所有技能目標，可考慮安排成為這些技能的「可指導他人」。</div>`; return; }
+        q('mx-pv').innerHTML = `<div class="text-xs text-slate-500">${esc(me.name)} 有 ${g.length} 項未達目標，依落差排序：</div>` + g.map(x => {
+            const js = MX.matchJobs(jobs, x.skill.name), ms = MX.mentors(mx, pid, x.skill.id);
+            return `<div class="rounded-xl border border-slate-200 dark:border-slate-700 p-3 space-y-1"><div class="font-semibold">${esc(x.skill.name)} <span class="text-xs font-normal text-slate-500">Lv${x.lv} → 目標 Lv${x.skill.target || 3}</span></div>
+              <div class="text-xs">教材：${js.length ? js.map(j => `<button data-oj="${j.id}" class="underline text-brand-600">${esc(j.title)}</button>`).join('、') : `<span class="text-amber-600">尚無對應工作分解表</span> <button data-mk="${esc(x.skill.name)}" class="underline text-brand-600">立即建立</button>`}</div>
+              <div class="text-xs">建議帶教：${ms.length ? esc(ms.map(m => m.name).join('、')) : '<span class="text-red-500">⚠ 團隊內無人可帶（單點／空缺）</span>'}</div></div>`;
+        }).join('');
+    }
+    async function aiPath() {
+        const mx = D().mx, pid = q('mx-who').value; if (!pid) return toast('請選擇人員');
+        const me = mx.people.find(p => p.id === pid), g = MX.gaps(mx, pid); if (!g.length) return toast('已無落差');
+        const sys = '你是 OJT 學習規劃師。只能使用提供的技能與教材清單，繁體中文，只輸出 JSON。';
+        const prompt = `學員：${me.name}（${me.role || '未填職務'}）\n技能落差：\n${g.map(x => `- ${x.skill.name}：目前 Lv${x.lv}，目標 Lv${x.skill.target || 3}；可用教材：${MX.matchJobs(D().jobs, x.skill.name).map(j => j.title).join('、') || '無'}`).join('\n')}\n表現觀察／前測：${q('mx-obs').value.trim() || '（無）'}\n\n請排出 4–8 週學習計畫：優先處理影響日常工作最大者（觀察中提到的問題優先）；一次不要排超過 2 個新技能；沒有教材的標示「需先建立教材」。\n輸出：{"plan":[{"week":1,"skill":"","action":"具體行動","why":"理由"}]}`;
+        const j = await askJSON(prompt, sys, 2000); plan = (Array.isArray(j.plan) ? j.plan : []).filter(x => x && x.skill && x.action);
+        if (!plan.length) throw new Error('AI 沒有回傳有效計畫');
+        q('mx-pv').insertAdjacentHTML('afterbegin', `<div class="rounded-xl bg-brand-50 dark:bg-slate-800 border border-brand-200 p-3 space-y-1"><div class="font-semibold">AI 週次計畫（建議）</div>${plan.map(x => `<div><b>第 ${esc(x.week)} 週</b>・${esc(x.skill)}：${esc(x.action)}<div class="text-xs text-slate-500">${esc(x.why || '')}</div></div>`).join('')}</div>`);
+    }
+
+    registerPlugin({
+        id: 'skillmx', title: '技能矩陣與學習地圖', icon: 'fa-table-cells', badge: '資深', html,
+        init() {
+            render(); PLUGINS.skillmx.onShow = render; q('mx-th').onchange = render;
+            q('mx-padd').onclick = () => { const n = q('mx-pn').value.trim(); if (!n) return; const mx = D().mx; if (mx.people.some(p => p.name === n)) return toast('已有同名人員'); mx.people.push({ id: uid('pp_'), name: n, role: q('mx-pr').value.trim() }); q('mx-pn').value = ''; save(); render(); };
+            q('mx-sadd').onclick = () => { const n = q('mx-sn').value.trim(); if (!n) return; const mx = D().mx; if (mx.skills.some(s => s.name === n)) return toast('已有同名技能'); mx.skills.push({ id: uid('sk_'), name: n, target: +q('mx-st').value }); q('mx-sn').value = ''; save(); render(); };
+            q('mx-fromjb').onclick = () => { const mx = D().mx; let n = 0; D().jobs.forEach(j => splitList(j.skills).forEach(s => { if (!mx.skills.some(k => k.name === s)) { mx.skills.push({ id: uid('sk_'), name: s, target: 3 }); n++; } })); save(); render(); toast(n ? `已新增 ${n} 項技能` : '沒有新的技能標籤（請先在工作分解表設定技能標籤並儲存）'); };
+            q('mx-csv').onclick = () => { const mx = D().mx; if (!mx.people.length) return toast('沒有資料'); dlCsv('技能矩陣.csv', [['姓名', '職務'].concat(mx.skills.map(s => s.name)).concat(['Lv3+項數'])].concat(mx.people.map(p => [p.name, p.role || ''].concat(mx.skills.map(s => MX.level(mx, p.id, s.id))).concat([mx.skills.filter(s => MX.level(mx, p.id, s.id) >= 3).length])))); };
+            q('mx-tbl').onclick = e => {
+                const mx = D().mx, c = e.target.closest('[data-c]'), rp = e.target.closest('[data-rp]'), rs = e.target.closest('[data-rs]');
+                if (c) { const k = c.dataset.c; mx.cells[k] = ((Number(mx.cells[k]) || 0) + 1) % 5; save(); render(); }
+                else if (rp && confirm('移除此人員？')) { mx.people = mx.people.filter(p => p.id !== rp.dataset.rp); Object.keys(mx.cells).forEach(k => { if (k.startsWith(rp.dataset.rp + '|')) delete mx.cells[k]; }); save(); render(); }
+                else if (rs && confirm('移除此技能？')) { mx.skills = mx.skills.filter(s => s.id !== rs.dataset.rs); Object.keys(mx.cells).forEach(k => { if (k.endsWith('|' + rs.dataset.rs)) delete mx.cells[k]; }); save(); render(); }
+            };
+            const ai = q('mx-ai'); ai.onclick = busyBtn(ai, '分析中…', async () => { try { await analyze(); } catch (e) { toast('分析失敗：' + e.message, 7000); } });
+            q('mx-sg').onclick = e => {
+                if (e.target.id !== 'mx-apply') return; const mx = D().mx; let n = 0;
+                q('mx-sg').querySelectorAll('[data-s]:checked').forEach(cb => { const u = sugg[+cb.dataset.s]; mx.cells[key(u.pid, u.sid)] = u.to; mx.evidence.unshift({ id: uid('ev_'), personId: u.pid, skillId: u.sid, text: `Lv${u.from}→Lv${u.to}：${u.reason}`, date: Date.now(), src: 'ai' }); n++; });
+                sugg = []; save(); renderSugg(); render(); toast(`已套用 ${n} 項調整`);
+            };
+            q('mx-path').onclick = pathView;
+            const ap = q('mx-aipath'); ap.onclick = busyBtn(ap, '規劃中…', async () => { try { pathView(); await aiPath(); } catch (e) { toast('失敗：' + e.message, 7000); } });
+            q('mx-pv').onclick = e => {
+                const o = e.target.closest('[data-oj]'), m = e.target.closest('[data-mk]');
+                if (o) { switchTab('jbs'); const j = D().jobs.find(x => x.id === o.dataset.oj); if (j) { q('jb-list').querySelector(`[data-open="${j.id}"]`)?.click(); } }
+                if (m) { switchTab('jbs'); q('jb-src').value = `作業主題：${m.dataset.mk}\n（請補充流程或貼上逐字稿，再按「AI 生成工作分解表」）`; q('jb-src').focus(); }
+            };
+        }
+    });
+})();
+
+    </script>
 </body>
 </html>
