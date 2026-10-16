@@ -1,5 +1,5 @@
 /* 智海 AI Service Worker：離線可開啟、App 外殼快取；LLM / Google / Puter 等 API 一律直連網路，絕不快取。 */
-const VERSION = 'zhihai-flomiai-v5-plugin2-ojt';
+const VERSION = 'zhihai-flomiai-v5-plugin3-cir';
 const SHELL_CACHE = `${VERSION}-shell`;
 const CDN_CACHE = `${VERSION}-cdn`;
 
