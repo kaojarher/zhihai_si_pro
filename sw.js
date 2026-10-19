@@ -1,5 +1,5 @@
 /* 智海 AI Service Worker：離線可開啟、App 外殼快取；LLM / Google / Puter 等 API 一律直連網路，絕不快取。 */
-const VERSION = 'zhihai-flomiai-v5-plugin3-cir';
+const VERSION = 'zhihai-flomiai-v5-plugin2-ojt-ocr1';
 const SHELL_CACHE = `${VERSION}-shell`;
 const CDN_CACHE = `${VERSION}-cdn`;
 
@@ -9,7 +9,7 @@ const SHELL = [
   './icons/apple-touch-icon.png', './icons/favicon-32.png'
 ];
 // 只快取這些「靜態資源」網域（Tailwind、FontAwesome、PDF/Word/Excel/PPT 解析套件）
-const CDN_HOSTS = ['cdn.tailwindcss.com', 'cdnjs.cloudflare.com'];
+const CDN_HOSTS = ['cdn.tailwindcss.com', 'cdnjs.cloudflare.com', 'cdn.jsdelivr.net'];  // jsdelivr：Tesseract.js OCR 引擎
 
 self.addEventListener('install', event => {
   event.waitUntil((async () => {

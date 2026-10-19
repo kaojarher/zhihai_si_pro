@@ -55,10 +55,14 @@ GitHub Pages / Netlify / Cloudflare Pages / Vercel：把整個資料夾原樣上
 3. **技能矩陣與學習地圖**：人員×技能 0–4 級熱圖、多能工、單點風險（Lv3+ 少於 2 人）、平均達成率；AI 依考核紀錄提出 ±1 級調整建議，需逐項確認；個人學習地圖依落差配對工作分解表與可帶教人員，可請 AI 排 4–8 週計畫。
 - 影片：LLM 不直接吃影片，請先取得字幕／逐字稿再貼入。AR/VR 僅輸出檢核點資料，實際動作辨識需另有 XR 平台。
 
-## 訓練變更影響審查（FY27 目標，第 4 個外掛「訓練變更影響審查」）
-解決：SPEC／SOP／OCAP／ECN 改版後，人工逐一確認 Training Package、OJT／ELRN、Checklist、Quiz、Learning Assignment、Certification 是否受影響的耗時與漏改風險。AI＝Assistant，不是 Approver；流程：AI 初判 → Technical Trainer Review → SME 確認 → Release。
-- 檔案格式：PDF、DOCX、XLSX、PPTX、MD、TXT 皆可匯入（訓練資產與改版前後文件）。解析在瀏覽器內完成，文字存本機 IndexedDB；只有 AI 判讀時才把相關片段送到你設定的 LLM。掃描 PDF／圖片需先 OCR。
-- 步驟：①匯入訓練資產並標註類別、負責人、來源文件編號（追溯對照）→ ②貼入或上傳改版前／後文件，自動比對出變更（可取消勾選排版、錯字雜訊，每次上限 40 項）→ ③規則＋檢索找候選，再由 AI 判斷；AI 引用的證據逐字驗證（✔已對原文／⚠未對原文）→ ④Trainer 逐筆採納／駁回／補登漏判，高風險須勾選「已逐一確認無影響候選」→ ⑤SME 確認後 Release，匯出報告與 CSV。
-- 指標：召回率＝採納 ÷（採納＋補登漏判）；精確率＝採納 ÷（採納＋駁回）；Review 時間下降＝1 − 實際耗時 ÷ 傳統預估基準。回測（歷史 ECN）與影子模式分開統計，對照 FY27 KPI（≥10 件、時間 ↓30%、辨識 ≥90%、TT／SME 驗證 100%）。
-- 內含 BKM 匯出（Prompt 版本＋檢查表）。
-- 注意：新版需重新整理兩次才會更新快取（sw.js 版本已更新）。
+## 文件匯入 OCR（本版新增）
+- 文件匯入區新增勾選框「使用 OCR 辨識」（預設不勾，選擇會記在瀏覽器）。不勾選＝完全不做 OCR，也不會下載 OCR 引擎。
+- 勾選後：
+  - **掃描版 PDF**（擷取不到文字）：逐頁轉成圖片辨識，最多前 30 頁（`OCR_MAX_PAGES`），倍率 `OCR_SCALE`＝2。
+  - **圖片檔**（JPG／PNG／WebP）：直接辨識。
+  - **Word／Excel／PowerPoint**：照常擷取文字，另外辨識檔案內嵌的圖片（PNG／JPG／WebP），結果附加在原文字之後，標註來源（例如「投影片3-圖1」）。PPTX 只辨識投影片本身引用的圖片，不含母片／版面配置的 Logo。
+- Office 內嵌圖片的過濾：略過小於 100×30 像素或小於 3 KB 的圖示／裝飾圖；辨識信心低於 30 或不足 3 字視為無文字；最多辨識 40 張（`OCR_MAX_IMAGES`、`OCR_MIN_W`、`OCR_MIN_H`、`OCR_MIN_BYTES`、`OCR_MIN_CONF` 可調整）。EMF／WMF 等向量圖不支援。
+- 引擎：Tesseract.js v5（開源，WebAssembly，本機執行，檔案內容不會上傳）；語言 `chi_tra+eng`。
+- 辨識後會開啟「OCR 辨識結果校對」視窗：掃描 PDF／圖片按「匯入」才建立文件，按「取消」則不匯入；Office 檔按「加入文件」附加圖片文字，按「略過圖片文字」則只匯入原有文字。
+- 首次使用需從 CDN（cdn.jsdelivr.net）下載引擎與語言資料；`sw.js` 已將 cdn.jsdelivr.net 加入快取名單。語言資料能否完整離線使用，請在實機測試。
+- 限制：若 PDF 只有部分頁面是掃描圖、其他頁有文字，仍視為「有文字」，不會觸發 OCR。

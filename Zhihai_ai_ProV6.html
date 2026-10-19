@@ -233,10 +233,18 @@
                         <div class="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl p-8 hover:border-brand-500 transition cursor-pointer" onclick="document.getElementById('doc-upload-input').click()">
                             <i class="fa-solid fa-cloud-arrow-up text-4xl text-brand-500 mb-3"></i>
                             <h3 class="font-bold text-lg">上傳學習教材與文件</h3>
-                            <p class="text-xs text-slate-400 mt-1">支援 PDF, TXT, MD, DOCX, XLSX, PPTX 格式</p>
-                            <input type="file" id="doc-upload-input" multiple accept=".pdf,.txt,.md,.csv,.json,.docx,.xlsx,.pptx" class="hidden" onchange="handleDocumentUpload(event)">
+                            <p class="text-xs text-slate-400 mt-1">支援 PDF, TXT, MD, DOCX, XLSX, PPTX 與圖片（JPG／PNG／WebP）</p>
+                            <input type="file" id="doc-upload-input" multiple accept=".pdf,.txt,.md,.csv,.json,.docx,.xlsx,.pptx,.jpg,.jpeg,.png,.webp" class="hidden" onchange="handleDocumentUpload(event)">
                             <button class="mt-4 px-4 py-2 bg-brand-500 text-white text-sm font-semibold rounded-xl shadow hover:bg-brand-600 transition">選擇檔案</button>
                         </div>
+                        <label class="mt-4 flex items-start gap-2 text-left text-sm cursor-pointer select-none">
+                            <input type="checkbox" id="doc-ocr-enabled" class="mt-1 w-4 h-4 shrink-0" onchange="saveOcrPref()">
+                            <span>
+                                <span class="font-semibold">使用 OCR 辨識（是否需 OCR）</span>
+                                <span class="block text-xs text-slate-500">勾選後：掃描版 PDF、圖片檔會自動辨識；Word／Excel／PowerPoint 內嵌的圖片文字也會一併辨識並附加在文件文字之後。</span>
+                                <span class="block text-xs text-slate-400">於瀏覽器本機執行，檔案不會上傳；首次使用需下載 OCR 引擎與繁中語言資料（建議用 Wi‑Fi）；辨識後會先讓你校對再匯入。</span>
+                            </span>
+                        </label>
                     </div>
                 </div>
 
@@ -904,9 +912,14 @@
             pdfWorker: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
             mammoth:'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js',
             xlsx:   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
-            jszip:  'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+            jszip:  'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+            tesseract: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'
         };
         const TEXT_TYPES = ['TXT', 'MD', 'CSV', 'JSON'];
+        const IMAGE_TYPES = ['JPG', 'JPEG', 'PNG', 'WEBP'];
+        const OCR_LANG = 'chi_tra+eng';   // 繁體中文＋英文
+        const OCR_MAX_PAGES = 30;         // 單一 PDF 最多辨識頁數，避免瀏覽器長時間卡住
+        const OCR_SCALE = 2;              // PDF 轉圖片的放大倍率（越大越準但越慢）
         const MAX_DOC_CHARS = 150000;
         const loadedLibs = {};
         let pdfWorkerUrl = null;
@@ -931,13 +944,13 @@
                 const el = document.createElement('script');
                 el.src = url;
                 el.onload = resolve;
-                el.onerror = () => { delete loadedLibs[url]; reject(new Error('無法載入解析套件，請確認網路可連線至 cdnjs.cloudflare.com')); };
+                el.onerror = () => { delete loadedLibs[url]; reject(new Error('無法載入解析套件，請確認網路可連線至 cdnjs.cloudflare.com 或 cdn.jsdelivr.net')); };
                 document.head.appendChild(el);
             });
             return loadedLibs[url];
         }
 
-        async function extractPdf(buf) {
+        async function openPdf(buf) {
             await loadScript(LIB_URLS.pdf);
             const lib = window.pdfjsLib;
             if (!pdfWorkerUrl) {
@@ -948,7 +961,11 @@
                 } catch (e) { pdfWorkerUrl = LIB_URLS.pdfWorker; }
             }
             lib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
-            const pdf = await lib.getDocument({ data: new Uint8Array(buf) }).promise;
+            return lib.getDocument({ data: new Uint8Array(buf) }).promise;
+        }
+
+        async function extractPdf(buf) {
+            const pdf = await openPdf(buf);
             const pages = [];
             for (let p = 1; p <= pdf.numPages; p++) {
                 const page = await pdf.getPage(p);
@@ -965,6 +982,257 @@
                 pages.push(`[第${p}頁]\n` + lines.join('\n'));
             }
             return { text: pages.join('\n\n'), pages: pdf.numPages };
+        }
+
+        // ===== OCR（Tesseract.js，於瀏覽器本機執行：掃描 PDF、圖片檔、Office 內嵌圖片）=====
+        const OFFICE_TYPES = ['DOCX', 'XLSX', 'PPTX'];
+        const OCR_MAX_IMAGES = 40;     // 單一 Office 檔最多辨識的內嵌圖片數
+        const OCR_MIN_W = 100;         // 小於此寬度的圖片視為圖示／裝飾，不辨識
+        const OCR_MIN_H = 30;          // 小於此高度的圖片不辨識
+        const OCR_MIN_BYTES = 3000;    // 小於此檔案大小的圖片不辨識
+        const OCR_MIN_CONF = 30;       // 辨識信心低於此值（0–100）的圖片視為無文字（例如一般照片）
+        const IMG_MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' };
+        const OCR_PREF_KEY = 'zhihai_ocr_enabled';
+
+        function isOcrEnabled() {
+            const el = document.getElementById('doc-ocr-enabled');
+            return !!(el && el.checked);
+        }
+        function saveOcrPref() {
+            try { localStorage.setItem(OCR_PREF_KEY, isOcrEnabled() ? '1' : '0'); } catch (e) {}
+        }
+        (function initOcrPref() {
+            const apply = () => {
+                const el = document.getElementById('doc-ocr-enabled');
+                try { if (el) el.checked = localStorage.getItem(OCR_PREF_KEY) === '1'; } catch (e) {}
+            };
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply); else apply();
+        })();
+
+        const CJK = '\\u3000-\\u303f\\u3400-\\u9fff\\uff00-\\uffef';
+        const CJK_GAP = new RegExp('([' + CJK + ']) +(?=[' + CJK + '])', 'g');
+        function cleanOcrText(t) {
+            return String(t || '').replace(/\r\n/g, '\n').replace(CJK_GAP, '$1').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+        }
+
+        async function createOcrWorker(onStatus, st) {
+            try { await loadScript(LIB_URLS.tesseract); }
+            catch (e) { throw new Error('OCR 引擎載入失敗：' + e.message); }
+            onStatus('正在載入 OCR 引擎與語言資料（首次使用需下載，請稍候）…');
+            return window.Tesseract.createWorker(OCR_LANG, 1, {
+                logger: m => {
+                    if (m && m.status === 'recognizing text' && typeof m.progress === 'number') {
+                        st.pct = Math.round(m.progress * 100);
+                        onStatus(`OCR 辨識中（${OCR_LANG}）：${st.label} ${st.pct}%`);
+                    }
+                }
+            });
+        }
+
+        // PDF（逐頁）或圖片檔
+        async function ocrDocument(file, type, onStatus) {
+            const st = { label: '', pct: 0 };
+            let worker;
+            try {
+                worker = await createOcrWorker(onStatus, st);
+                const parts = [];
+                let truncated = false, total = 1;
+                if (type === 'PDF') {
+                    const pdf = await openPdf(await file.arrayBuffer());
+                    total = Math.min(pdf.numPages, OCR_MAX_PAGES);
+                    truncated = pdf.numPages > OCR_MAX_PAGES;
+                    for (let page = 1; page <= total; page++) {
+                        st.label = `第 ${page}/${total} 頁`; st.pct = 0;
+                        onStatus(`OCR 辨識中（${OCR_LANG}）：${st.label} 0%`);
+                        const pg = await pdf.getPage(page);
+                        const vp = pg.getViewport({ scale: OCR_SCALE });
+                        const canvas = document.createElement('canvas');
+                        canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
+                        await pg.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+                        const r = await worker.recognize(canvas);
+                        canvas.width = canvas.height = 0;   // 釋放記憶體
+                        parts.push(`[第${page}頁]\n` + cleanOcrText(r.data.text));
+                    }
+                } else {
+                    st.label = '圖片'; onStatus(`OCR 辨識中（${OCR_LANG}）：圖片 0%`);
+                    const r = await worker.recognize(file);
+                    parts.push(cleanOcrText(r.data.text));
+                }
+                return { text: parts.join('\n\n'), pages: total, truncated };
+            } catch (err) {
+                throw new Error('OCR 失敗：' + (err && err.message ? err.message : err));
+            } finally {
+                if (worker) { try { await worker.terminate(); } catch (e) {} }
+            }
+        }
+
+        // 校對視窗：回傳校對後文字；取消回傳 null
+        function ocrReviewDialog(name, text, note, opts) {
+            opts = opts || {};
+            const okLabel = opts.okLabel || '匯入';
+            const cancelLabel = opts.cancelLabel || '取消';
+            const hint = opts.hint || 'OCR 可能有錯字，請直接在下方修正；按「匯入」後才會建立文件與課程，按「取消」則不匯入。';
+            return new Promise(resolve => {
+                const ov = document.createElement('div');
+                ov.className = 'fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4';
+                ov.innerHTML = `
+                    <div class="w-full max-w-3xl max-h-[92vh] flex flex-col rounded-2xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 shadow-2xl border border-slate-200 dark:border-slate-700">
+                        <div class="p-4 border-b border-slate-200 dark:border-slate-700">
+                            <h3 class="font-bold">OCR 辨識結果校對</h3>
+                            <p class="text-xs text-slate-500 mt-1 break-all">${escapeHtml(name)}　${escapeHtml(note || '')}</p>
+                            <p class="text-xs text-amber-600 mt-1">${escapeHtml(hint)}</p>
+                        </div>
+                        <textarea id="ocr-review-text" class="flex-1 min-h-[40vh] m-4 p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm font-mono leading-relaxed"></textarea>
+                        <div class="p-4 pt-0 flex justify-between items-center gap-2">
+                            <span id="ocr-review-count" class="text-xs text-slate-400"></span>
+                            <div class="flex gap-2">
+                                <button type="button" id="ocr-review-cancel" class="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-600 text-sm">${escapeHtml(cancelLabel)}</button>
+                                <button type="button" id="ocr-review-ok" class="px-4 py-2 rounded-xl bg-brand-500 text-white text-sm font-semibold hover:bg-brand-600">${escapeHtml(okLabel)}</button>
+                            </div>
+                        </div>
+                    </div>`;
+                document.body.appendChild(ov);
+                const ta = ov.querySelector('#ocr-review-text');
+                const cnt = ov.querySelector('#ocr-review-count');
+                ta.value = text;
+                const upd = () => { cnt.textContent = ta.value.length + ' 字'; };
+                upd(); ta.addEventListener('input', upd);
+                const done = v => { document.removeEventListener('keydown', onKey); ov.remove(); resolve(v); };
+                const onKey = e => { if (e.key === 'Escape') done(null); };
+                document.addEventListener('keydown', onKey);
+                ov.querySelector('#ocr-review-cancel').onclick = () => done(null);
+                ov.querySelector('#ocr-review-ok').onclick = () => done(ta.value);
+                ta.focus();
+            });
+        }
+
+        // 掃描 PDF／圖片檔：已勾選 OCR 才會呼叫。回傳 { text, note } 或 { cancelled: true }
+        async function runOcrFlow(file, type, idx, count) {
+            const r = await ocrDocument(file, type, msg => toast(`(${idx}/${count}) ${file.name}\n${msg}`, 0));
+            toast('OCR 完成，請校對辨識結果。', 3000);
+            const note = (type === 'PDF' ? `共辨識 ${r.pages} 頁` + (r.truncated ? `（僅前 ${OCR_MAX_PAGES} 頁）` : '') : '圖片辨識') + `，語言 ${OCR_LANG}`;
+            const reviewed = await ocrReviewDialog(file.name, r.text, note);
+            if (reviewed === null) return { cancelled: true };
+            return { text: reviewed, note: `OCR 辨識（${OCR_LANG}${r.truncated ? `，僅前 ${OCR_MAX_PAGES} 頁` : ''}），已由使用者校對。` };
+        }
+
+        // ---- Office（DOCX / PPTX / XLSX）內嵌圖片 ----
+        function resolveZipPath(baseDir, target) {
+            const raw = target.startsWith('/') ? target.slice(1) : baseDir + target;
+            const out = [];
+            for (const p of raw.split('/')) { if (p === '..') out.pop(); else if (p && p !== '.') out.push(p); }
+            return out.join('/');
+        }
+        function parseImageRels(xml) {
+            return [...xml.matchAll(/<Relationship\b[^>]*>/g)].map(m => ({
+                id: (m[0].match(/\bId="([^"]*)"/) || [])[1],
+                target: (m[0].match(/\bTarget="([^"]*)"/) || [])[1],
+                type: (m[0].match(/\bType="([^"]*)"/) || [])[1] || ''
+            })).filter(r => r.id && r.target && /\/image$/.test(r.type));
+        }
+        // 依文件內的出現順序回傳 [{ path, label }]；PPTX 只取投影片本身引用的圖片（排除母片／版面配置的 Logo）
+        async function collectOfficeImages(zip, type) {
+            const isImg = n => /\.(png|jpe?g|webp)$/i.test(n);
+            const list = [], seen = new Set();
+            const add = (path, label) => {
+                if (path && !seen.has(path) && zip.file(path) && isImg(path)) { seen.add(path); list.push({ path, label }); }
+            };
+            if (type === 'PPTX') {
+                const num = n => parseInt(n.match(/slide(\d+)\.xml$/)[1], 10);
+                const slides = Object.keys(zip.files).filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n)).sort((a, b) => num(a) - num(b));
+                for (const s of slides) {
+                    const relFile = zip.file(`ppt/slides/_rels/slide${num(s)}.xml.rels`);
+                    if (!relFile) continue;
+                    let j = 0;
+                    for (const r of parseImageRels(await relFile.async('string'))) {
+                        const path = resolveZipPath('ppt/slides/', r.target);
+                        if (!seen.has(path) && zip.file(path) && isImg(path)) add(path, `投影片${num(s)}-圖${++j}`);
+                    }
+                }
+            } else if (type === 'DOCX') {
+                const relFile = zip.file('word/_rels/document.xml.rels'), docFile = zip.file('word/document.xml');
+                if (relFile && docFile) {
+                    const map = {};
+                    for (const r of parseImageRels(await relFile.async('string'))) map[r.id] = resolveZipPath('word/', r.target);
+                    const xml = await docFile.async('string');
+                    let k = 0;
+                    for (const m of xml.matchAll(/r:embed="([^"]+)"/g)) {
+                        const path = map[m[1]];
+                        if (path && !seen.has(path) && zip.file(path) && isImg(path)) add(path, `Word 圖片${++k}`);
+                    }
+                }
+            } else if (type === 'XLSX') {
+                let k = 0;
+                for (const n of Object.keys(zip.files).filter(n => /^xl\/media\//.test(n) && isImg(n)).sort()) add(n, `Excel 圖片${++k}（${n.split('/').pop()}）`);
+            }
+            return list;
+        }
+
+        async function imageSize(blob) {
+            try {
+                if (window.createImageBitmap) { const b = await createImageBitmap(blob); const r = { w: b.width, h: b.height }; if (b.close) b.close(); return r; }
+            } catch (e) {}
+            return new Promise(res => {
+                const u = URL.createObjectURL(blob), im = new Image();
+                im.onload = () => { res({ w: im.naturalWidth, h: im.naturalHeight }); URL.revokeObjectURL(u); };
+                im.onerror = () => { res(null); URL.revokeObjectURL(u); };
+                im.src = u;
+            });
+        }
+
+        // 已勾選 OCR 才會呼叫。回傳 null（沒有可辨識的圖片）或 { text, note, warn }
+        async function runOfficeOcr(file, type, idx, count) {
+            const status = msg => toast(`(${idx}/${count}) ${file.name}\n${msg}`, 0);
+            status('檢查檔案內嵌圖片…');
+            await loadScript(LIB_URLS.jszip);
+            const zip = await window.JSZip.loadAsync(await file.arrayBuffer());
+            const cands = await collectOfficeImages(zip, type);
+            if (!cands.length) return null;
+
+            // 過濾圖示／裝飾（尺寸、檔案大小）
+            const picked = [];
+            let tooMany = false;
+            for (const c of cands) {
+                const bytes = await zip.file(c.path).async('uint8array');
+                if (bytes.length < OCR_MIN_BYTES) continue;
+                const blob = new Blob([bytes], { type: IMG_MIME[c.path.split('.').pop().toLowerCase()] || 'image/png' });
+                const sz = await imageSize(blob);
+                if (!sz || sz.w < OCR_MIN_W || sz.h < OCR_MIN_H) continue;
+                if (picked.length >= OCR_MAX_IMAGES) { tooMany = true; break; }
+                picked.push({ label: c.label, blob });
+            }
+            if (!picked.length) return { text: '', warn: `內嵌圖片皆為小圖示或裝飾（共 ${cands.length} 張），未進行 OCR。` };
+
+            const st = { label: '', pct: 0 };
+            let worker;
+            const parts = [];
+            let skipped = 0;
+            try {
+                worker = await createOcrWorker(status, st);
+                for (let n = 0; n < picked.length; n++) {
+                    st.label = `圖片 ${n + 1}/${picked.length}`; st.pct = 0;
+                    status(`OCR 辨識中（${OCR_LANG}）：${st.label} 0%`);
+                    const r = await worker.recognize(picked[n].blob);
+                    const text = cleanOcrText(r.data.text);
+                    const bare = text.replace(/\s+/g, '');
+                    if (bare.length < 3 || (typeof r.data.confidence === 'number' && r.data.confidence < OCR_MIN_CONF)) { skipped++; continue; }
+                    parts.push(`[圖片辨識：${picked[n].label}]\n${text}`);
+                }
+            } catch (err) {
+                throw new Error('內嵌圖片 OCR 失敗：' + (err && err.message ? err.message : err));
+            } finally {
+                if (worker) { try { await worker.terminate(); } catch (e) {} }
+            }
+            if (!parts.length) return { text: '', warn: `已檢查 ${picked.length} 張內嵌圖片，沒有辨識到文字。` };
+
+            toast('OCR 完成，請校對辨識結果。', 3000);
+            const info = `共辨識 ${picked.length} 張圖片` + (skipped ? `（${skipped} 張無文字／低信心已略過）` : '') + (tooMany ? `（僅前 ${OCR_MAX_IMAGES} 張）` : '') + `，語言 ${OCR_LANG}`;
+            const reviewed = await ocrReviewDialog(file.name, parts.join('\n\n'), info, {
+                okLabel: '加入文件', cancelLabel: '略過圖片文字',
+                hint: '以下是檔案內嵌圖片的辨識文字，將附加在原有文字之後。請修正錯字或刪除不需要的段落；按「略過圖片文字」則只匯入原有文字。'
+            });
+            if (reviewed === null || !reviewed.trim()) return { text: '', warn: '已略過內嵌圖片的 OCR 文字。' };
+            return { text: reviewed, note: `已附加內嵌圖片 OCR 文字（${picked.length} 張，${OCR_LANG}${tooMany ? `，僅前 ${OCR_MAX_IMAGES} 張` : ''}），已由使用者校對。` };
         }
 
         async function extractDocx(buf) {
@@ -998,6 +1266,7 @@
 
         async function extractText(file, type) {
             if (TEXT_TYPES.includes(type)) return { text: await file.text() };
+            if (IMAGE_TYPES.includes(type)) return { text: '' };   // 圖片沒有內嵌文字，交給 OCR 流程
             const buf = await file.arrayBuffer();
             if (type === 'PDF') return extractPdf(buf);
             if (type === 'DOCX') return extractDocx(buf);
@@ -1011,6 +1280,7 @@
             event.target.value = '';
             let ok = 0, fail = 0, dup = 0;
             const newCourses = [];
+            const ocrOn = isOcrEnabled();
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 const type = file.name.split('.').pop().toUpperCase();
@@ -1026,15 +1296,38 @@
                 };
                 try {
                     const r = await extractText(file, type);
-                    const text = (r.text || '').replace(/\r\n/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-                    const bare = text.replace(/\[(第\d+頁|投影片\d+)\]/g, '').replace(/\s+/g, '');
+                    const norm = t => (t || '').replace(/\r\n/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+                    const stripMarks = t => t.replace(/\[(第\d+頁|投影片\d+)\]/g, '').replace(/\s+/g, '');
+                    let text = norm(r.text);
+                    let bare = stripMarks(text);
+                    let ocrNote = '', ocrWarn = '', skipReason = '';
+                    if (bare.length < 30 && (type === 'PDF' || IMAGE_TYPES.includes(type))) {
+                        if (!ocrOn) skipReason = 'off';
+                        else {
+                            const o = await runOcrFlow(file, type, i + 1, files.length);
+                            if (o.cancelled) skipReason = 'cancel';
+                            else { text = norm(o.text); bare = stripMarks(text); ocrNote = o.note; }
+                        }
+                    } else if (ocrOn && OFFICE_TYPES.includes(type)) {
+                        try {
+                            const o = await runOfficeOcr(file, type, i + 1, files.length);
+                            if (o && o.text) { text = norm(text + '\n\n' + o.text); bare = stripMarks(text); ocrNote = o.note; }
+                            else if (o && o.warn) ocrWarn = o.warn;
+                        } catch (e) { ocrWarn = e.message; }
+                    }
                     if (bare.length < 30) {
-                        doc.parseNote = type === 'PDF' ? '此 PDF 沒有可擷取的文字（可能是掃描圖片檔），目前不支援 OCR。' : '檔案中沒有可擷取的文字。';
+                        if (skipReason === 'off') doc.parseNote = type === 'PDF'
+                            ? '此 PDF 沒有可擷取的文字（可能是掃描圖片檔）。請在匯入區勾選「使用 OCR 辨識」後重新上傳。'
+                            : '圖片檔沒有可讀文字。請在匯入區勾選「使用 OCR 辨識」後重新上傳。';
+                        else if (skipReason === 'cancel') doc.parseNote = '已取消 OCR 結果匯入；如需辨識，請重新上傳。';
+                        else if (ocrNote) doc.parseNote = 'OCR 結果文字過少，未建立內容。';
+                        else doc.parseNote = ocrWarn || ('檔案中沒有可擷取的文字。' + (OFFICE_TYPES.includes(type) && !ocrOn ? '若內容是圖片，可勾選「使用 OCR 辨識」後重新上傳。' : ''));
                         fail++;
                     } else {
                         doc.content = text.slice(0, MAX_DOC_CHARS);
                         doc.chars = text.length;
-                        if (text.length > MAX_DOC_CHARS) doc.parseNote = `內容過長，僅保留前 ${MAX_DOC_CHARS} 字。`;
+                        doc.parseNote = [ocrNote, ocrWarn].filter(Boolean).join(' ');
+                        if (text.length > MAX_DOC_CHARS) doc.parseNote = (doc.parseNote ? doc.parseNote + ' ' : '') + `內容過長，僅保留前 ${MAX_DOC_CHARS} 字。`;
                         ok++;
                     }
                 } catch (err) {

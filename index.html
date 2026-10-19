@@ -233,10 +233,18 @@
                         <div class="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-2xl p-8 hover:border-brand-500 transition cursor-pointer" onclick="document.getElementById('doc-upload-input').click()">
                             <i class="fa-solid fa-cloud-arrow-up text-4xl text-brand-500 mb-3"></i>
                             <h3 class="font-bold text-lg">上傳學習教材與文件</h3>
-                            <p class="text-xs text-slate-400 mt-1">支援 PDF, TXT, MD, DOCX, XLSX, PPTX 格式</p>
-                            <input type="file" id="doc-upload-input" multiple accept=".pdf,.txt,.md,.csv,.json,.docx,.xlsx,.pptx" class="hidden" onchange="handleDocumentUpload(event)">
+                            <p class="text-xs text-slate-400 mt-1">支援 PDF, TXT, MD, DOCX, XLSX, PPTX 與圖片（JPG／PNG／WebP）</p>
+                            <input type="file" id="doc-upload-input" multiple accept=".pdf,.txt,.md,.csv,.json,.docx,.xlsx,.pptx,.jpg,.jpeg,.png,.webp" class="hidden" onchange="handleDocumentUpload(event)">
                             <button class="mt-4 px-4 py-2 bg-brand-500 text-white text-sm font-semibold rounded-xl shadow hover:bg-brand-600 transition">選擇檔案</button>
                         </div>
+                        <label class="mt-4 flex items-start gap-2 text-left text-sm cursor-pointer select-none">
+                            <input type="checkbox" id="doc-ocr-enabled" class="mt-1 w-4 h-4 shrink-0" onchange="saveOcrPref()">
+                            <span>
+                                <span class="font-semibold">使用 OCR 辨識（是否需 OCR）</span>
+                                <span class="block text-xs text-slate-500">勾選後：掃描版 PDF、圖片檔會自動辨識；Word／Excel／PowerPoint 內嵌的圖片文字也會一併辨識並附加在文件文字之後。</span>
+                                <span class="block text-xs text-slate-400">於瀏覽器本機執行，檔案不會上傳；首次使用需下載 OCR 引擎與繁中語言資料（建議用 Wi‑Fi）；辨識後會先讓你校對再匯入。</span>
+                            </span>
+                        </label>
                     </div>
                 </div>
 
@@ -904,9 +912,14 @@
             pdfWorker: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
             mammoth:'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js',
             xlsx:   'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
-            jszip:  'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js'
+            jszip:  'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js',
+            tesseract: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js'
         };
         const TEXT_TYPES = ['TXT', 'MD', 'CSV', 'JSON'];
+        const IMAGE_TYPES = ['JPG', 'JPEG', 'PNG', 'WEBP'];
+        const OCR_LANG = 'chi_tra+eng';   // 繁體中文＋英文
+        const OCR_MAX_PAGES = 30;         // 單一 PDF 最多辨識頁數，避免瀏覽器長時間卡住
+        const OCR_SCALE = 2;              // PDF 轉圖片的放大倍率（越大越準但越慢）
         const MAX_DOC_CHARS = 150000;
         const loadedLibs = {};
         let pdfWorkerUrl = null;
@@ -931,13 +944,13 @@
                 const el = document.createElement('script');
                 el.src = url;
                 el.onload = resolve;
-                el.onerror = () => { delete loadedLibs[url]; reject(new Error('無法載入解析套件，請確認網路可連線至 cdnjs.cloudflare.com')); };
+                el.onerror = () => { delete loadedLibs[url]; reject(new Error('無法載入解析套件，請確認網路可連線至 cdnjs.cloudflare.com 或 cdn.jsdelivr.net')); };
                 document.head.appendChild(el);
             });
             return loadedLibs[url];
         }
 
-        async function extractPdf(buf) {
+        async function openPdf(buf) {
             await loadScript(LIB_URLS.pdf);
             const lib = window.pdfjsLib;
             if (!pdfWorkerUrl) {
@@ -948,7 +961,11 @@
                 } catch (e) { pdfWorkerUrl = LIB_URLS.pdfWorker; }
             }
             lib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
-            const pdf = await lib.getDocument({ data: new Uint8Array(buf) }).promise;
+            return lib.getDocument({ data: new Uint8Array(buf) }).promise;
+        }
+
+        async function extractPdf(buf) {
+            const pdf = await openPdf(buf);
             const pages = [];
             for (let p = 1; p <= pdf.numPages; p++) {
                 const page = await pdf.getPage(p);
@@ -965,6 +982,257 @@
                 pages.push(`[第${p}頁]\n` + lines.join('\n'));
             }
             return { text: pages.join('\n\n'), pages: pdf.numPages };
+        }
+
+        // ===== OCR（Tesseract.js，於瀏覽器本機執行：掃描 PDF、圖片檔、Office 內嵌圖片）=====
+        const OFFICE_TYPES = ['DOCX', 'XLSX', 'PPTX'];
+        const OCR_MAX_IMAGES = 40;     // 單一 Office 檔最多辨識的內嵌圖片數
+        const OCR_MIN_W = 100;         // 小於此寬度的圖片視為圖示／裝飾，不辨識
+        const OCR_MIN_H = 30;          // 小於此高度的圖片不辨識
+        const OCR_MIN_BYTES = 3000;    // 小於此檔案大小的圖片不辨識
+        const OCR_MIN_CONF = 30;       // 辨識信心低於此值（0–100）的圖片視為無文字（例如一般照片）
+        const IMG_MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp' };
+        const OCR_PREF_KEY = 'zhihai_ocr_enabled';
+
+        function isOcrEnabled() {
+            const el = document.getElementById('doc-ocr-enabled');
+            return !!(el && el.checked);
+        }
+        function saveOcrPref() {
+            try { localStorage.setItem(OCR_PREF_KEY, isOcrEnabled() ? '1' : '0'); } catch (e) {}
+        }
+        (function initOcrPref() {
+            const apply = () => {
+                const el = document.getElementById('doc-ocr-enabled');
+                try { if (el) el.checked = localStorage.getItem(OCR_PREF_KEY) === '1'; } catch (e) {}
+            };
+            if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', apply); else apply();
+        })();
+
+        const CJK = '\\u3000-\\u303f\\u3400-\\u9fff\\uff00-\\uffef';
+        const CJK_GAP = new RegExp('([' + CJK + ']) +(?=[' + CJK + '])', 'g');
+        function cleanOcrText(t) {
+            return String(t || '').replace(/\r\n/g, '\n').replace(CJK_GAP, '$1').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+        }
+
+        async function createOcrWorker(onStatus, st) {
+            try { await loadScript(LIB_URLS.tesseract); }
+            catch (e) { throw new Error('OCR 引擎載入失敗：' + e.message); }
+            onStatus('正在載入 OCR 引擎與語言資料（首次使用需下載，請稍候）…');
+            return window.Tesseract.createWorker(OCR_LANG, 1, {
+                logger: m => {
+                    if (m && m.status === 'recognizing text' && typeof m.progress === 'number') {
+                        st.pct = Math.round(m.progress * 100);
+                        onStatus(`OCR 辨識中（${OCR_LANG}）：${st.label} ${st.pct}%`);
+                    }
+                }
+            });
+        }
+
+        // PDF（逐頁）或圖片檔
+        async function ocrDocument(file, type, onStatus) {
+            const st = { label: '', pct: 0 };
+            let worker;
+            try {
+                worker = await createOcrWorker(onStatus, st);
+                const parts = [];
+                let truncated = false, total = 1;
+                if (type === 'PDF') {
+                    const pdf = await openPdf(await file.arrayBuffer());
+                    total = Math.min(pdf.numPages, OCR_MAX_PAGES);
+                    truncated = pdf.numPages > OCR_MAX_PAGES;
+                    for (let page = 1; page <= total; page++) {
+                        st.label = `第 ${page}/${total} 頁`; st.pct = 0;
+                        onStatus(`OCR 辨識中（${OCR_LANG}）：${st.label} 0%`);
+                        const pg = await pdf.getPage(page);
+                        const vp = pg.getViewport({ scale: OCR_SCALE });
+                        const canvas = document.createElement('canvas');
+                        canvas.width = Math.ceil(vp.width); canvas.height = Math.ceil(vp.height);
+                        await pg.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+                        const r = await worker.recognize(canvas);
+                        canvas.width = canvas.height = 0;   // 釋放記憶體
+                        parts.push(`[第${page}頁]\n` + cleanOcrText(r.data.text));
+                    }
+                } else {
+                    st.label = '圖片'; onStatus(`OCR 辨識中（${OCR_LANG}）：圖片 0%`);
+                    const r = await worker.recognize(file);
+                    parts.push(cleanOcrText(r.data.text));
+                }
+                return { text: parts.join('\n\n'), pages: total, truncated };
+            } catch (err) {
+                throw new Error('OCR 失敗：' + (err && err.message ? err.message : err));
+            } finally {
+                if (worker) { try { await worker.terminate(); } catch (e) {} }
+            }
+        }
+
+        // 校對視窗：回傳校對後文字；取消回傳 null
+        function ocrReviewDialog(name, text, note, opts) {
+            opts = opts || {};
+            const okLabel = opts.okLabel || '匯入';
+            const cancelLabel = opts.cancelLabel || '取消';
+            const hint = opts.hint || 'OCR 可能有錯字，請直接在下方修正；按「匯入」後才會建立文件與課程，按「取消」則不匯入。';
+            return new Promise(resolve => {
+                const ov = document.createElement('div');
+                ov.className = 'fixed inset-0 z-[70] bg-black/50 flex items-center justify-center p-4';
+                ov.innerHTML = `
+                    <div class="w-full max-w-3xl max-h-[92vh] flex flex-col rounded-2xl bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 shadow-2xl border border-slate-200 dark:border-slate-700">
+                        <div class="p-4 border-b border-slate-200 dark:border-slate-700">
+                            <h3 class="font-bold">OCR 辨識結果校對</h3>
+                            <p class="text-xs text-slate-500 mt-1 break-all">${escapeHtml(name)}　${escapeHtml(note || '')}</p>
+                            <p class="text-xs text-amber-600 mt-1">${escapeHtml(hint)}</p>
+                        </div>
+                        <textarea id="ocr-review-text" class="flex-1 min-h-[40vh] m-4 p-3 rounded-xl border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-sm font-mono leading-relaxed"></textarea>
+                        <div class="p-4 pt-0 flex justify-between items-center gap-2">
+                            <span id="ocr-review-count" class="text-xs text-slate-400"></span>
+                            <div class="flex gap-2">
+                                <button type="button" id="ocr-review-cancel" class="px-4 py-2 rounded-xl border border-slate-300 dark:border-slate-600 text-sm">${escapeHtml(cancelLabel)}</button>
+                                <button type="button" id="ocr-review-ok" class="px-4 py-2 rounded-xl bg-brand-500 text-white text-sm font-semibold hover:bg-brand-600">${escapeHtml(okLabel)}</button>
+                            </div>
+                        </div>
+                    </div>`;
+                document.body.appendChild(ov);
+                const ta = ov.querySelector('#ocr-review-text');
+                const cnt = ov.querySelector('#ocr-review-count');
+                ta.value = text;
+                const upd = () => { cnt.textContent = ta.value.length + ' 字'; };
+                upd(); ta.addEventListener('input', upd);
+                const done = v => { document.removeEventListener('keydown', onKey); ov.remove(); resolve(v); };
+                const onKey = e => { if (e.key === 'Escape') done(null); };
+                document.addEventListener('keydown', onKey);
+                ov.querySelector('#ocr-review-cancel').onclick = () => done(null);
+                ov.querySelector('#ocr-review-ok').onclick = () => done(ta.value);
+                ta.focus();
+            });
+        }
+
+        // 掃描 PDF／圖片檔：已勾選 OCR 才會呼叫。回傳 { text, note } 或 { cancelled: true }
+        async function runOcrFlow(file, type, idx, count) {
+            const r = await ocrDocument(file, type, msg => toast(`(${idx}/${count}) ${file.name}\n${msg}`, 0));
+            toast('OCR 完成，請校對辨識結果。', 3000);
+            const note = (type === 'PDF' ? `共辨識 ${r.pages} 頁` + (r.truncated ? `（僅前 ${OCR_MAX_PAGES} 頁）` : '') : '圖片辨識') + `，語言 ${OCR_LANG}`;
+            const reviewed = await ocrReviewDialog(file.name, r.text, note);
+            if (reviewed === null) return { cancelled: true };
+            return { text: reviewed, note: `OCR 辨識（${OCR_LANG}${r.truncated ? `，僅前 ${OCR_MAX_PAGES} 頁` : ''}），已由使用者校對。` };
+        }
+
+        // ---- Office（DOCX / PPTX / XLSX）內嵌圖片 ----
+        function resolveZipPath(baseDir, target) {
+            const raw = target.startsWith('/') ? target.slice(1) : baseDir + target;
+            const out = [];
+            for (const p of raw.split('/')) { if (p === '..') out.pop(); else if (p && p !== '.') out.push(p); }
+            return out.join('/');
+        }
+        function parseImageRels(xml) {
+            return [...xml.matchAll(/<Relationship\b[^>]*>/g)].map(m => ({
+                id: (m[0].match(/\bId="([^"]*)"/) || [])[1],
+                target: (m[0].match(/\bTarget="([^"]*)"/) || [])[1],
+                type: (m[0].match(/\bType="([^"]*)"/) || [])[1] || ''
+            })).filter(r => r.id && r.target && /\/image$/.test(r.type));
+        }
+        // 依文件內的出現順序回傳 [{ path, label }]；PPTX 只取投影片本身引用的圖片（排除母片／版面配置的 Logo）
+        async function collectOfficeImages(zip, type) {
+            const isImg = n => /\.(png|jpe?g|webp)$/i.test(n);
+            const list = [], seen = new Set();
+            const add = (path, label) => {
+                if (path && !seen.has(path) && zip.file(path) && isImg(path)) { seen.add(path); list.push({ path, label }); }
+            };
+            if (type === 'PPTX') {
+                const num = n => parseInt(n.match(/slide(\d+)\.xml$/)[1], 10);
+                const slides = Object.keys(zip.files).filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n)).sort((a, b) => num(a) - num(b));
+                for (const s of slides) {
+                    const relFile = zip.file(`ppt/slides/_rels/slide${num(s)}.xml.rels`);
+                    if (!relFile) continue;
+                    let j = 0;
+                    for (const r of parseImageRels(await relFile.async('string'))) {
+                        const path = resolveZipPath('ppt/slides/', r.target);
+                        if (!seen.has(path) && zip.file(path) && isImg(path)) add(path, `投影片${num(s)}-圖${++j}`);
+                    }
+                }
+            } else if (type === 'DOCX') {
+                const relFile = zip.file('word/_rels/document.xml.rels'), docFile = zip.file('word/document.xml');
+                if (relFile && docFile) {
+                    const map = {};
+                    for (const r of parseImageRels(await relFile.async('string'))) map[r.id] = resolveZipPath('word/', r.target);
+                    const xml = await docFile.async('string');
+                    let k = 0;
+                    for (const m of xml.matchAll(/r:embed="([^"]+)"/g)) {
+                        const path = map[m[1]];
+                        if (path && !seen.has(path) && zip.file(path) && isImg(path)) add(path, `Word 圖片${++k}`);
+                    }
+                }
+            } else if (type === 'XLSX') {
+                let k = 0;
+                for (const n of Object.keys(zip.files).filter(n => /^xl\/media\//.test(n) && isImg(n)).sort()) add(n, `Excel 圖片${++k}（${n.split('/').pop()}）`);
+            }
+            return list;
+        }
+
+        async function imageSize(blob) {
+            try {
+                if (window.createImageBitmap) { const b = await createImageBitmap(blob); const r = { w: b.width, h: b.height }; if (b.close) b.close(); return r; }
+            } catch (e) {}
+            return new Promise(res => {
+                const u = URL.createObjectURL(blob), im = new Image();
+                im.onload = () => { res({ w: im.naturalWidth, h: im.naturalHeight }); URL.revokeObjectURL(u); };
+                im.onerror = () => { res(null); URL.revokeObjectURL(u); };
+                im.src = u;
+            });
+        }
+
+        // 已勾選 OCR 才會呼叫。回傳 null（沒有可辨識的圖片）或 { text, note, warn }
+        async function runOfficeOcr(file, type, idx, count) {
+            const status = msg => toast(`(${idx}/${count}) ${file.name}\n${msg}`, 0);
+            status('檢查檔案內嵌圖片…');
+            await loadScript(LIB_URLS.jszip);
+            const zip = await window.JSZip.loadAsync(await file.arrayBuffer());
+            const cands = await collectOfficeImages(zip, type);
+            if (!cands.length) return null;
+
+            // 過濾圖示／裝飾（尺寸、檔案大小）
+            const picked = [];
+            let tooMany = false;
+            for (const c of cands) {
+                const bytes = await zip.file(c.path).async('uint8array');
+                if (bytes.length < OCR_MIN_BYTES) continue;
+                const blob = new Blob([bytes], { type: IMG_MIME[c.path.split('.').pop().toLowerCase()] || 'image/png' });
+                const sz = await imageSize(blob);
+                if (!sz || sz.w < OCR_MIN_W || sz.h < OCR_MIN_H) continue;
+                if (picked.length >= OCR_MAX_IMAGES) { tooMany = true; break; }
+                picked.push({ label: c.label, blob });
+            }
+            if (!picked.length) return { text: '', warn: `內嵌圖片皆為小圖示或裝飾（共 ${cands.length} 張），未進行 OCR。` };
+
+            const st = { label: '', pct: 0 };
+            let worker;
+            const parts = [];
+            let skipped = 0;
+            try {
+                worker = await createOcrWorker(status, st);
+                for (let n = 0; n < picked.length; n++) {
+                    st.label = `圖片 ${n + 1}/${picked.length}`; st.pct = 0;
+                    status(`OCR 辨識中（${OCR_LANG}）：${st.label} 0%`);
+                    const r = await worker.recognize(picked[n].blob);
+                    const text = cleanOcrText(r.data.text);
+                    const bare = text.replace(/\s+/g, '');
+                    if (bare.length < 3 || (typeof r.data.confidence === 'number' && r.data.confidence < OCR_MIN_CONF)) { skipped++; continue; }
+                    parts.push(`[圖片辨識：${picked[n].label}]\n${text}`);
+                }
+            } catch (err) {
+                throw new Error('內嵌圖片 OCR 失敗：' + (err && err.message ? err.message : err));
+            } finally {
+                if (worker) { try { await worker.terminate(); } catch (e) {} }
+            }
+            if (!parts.length) return { text: '', warn: `已檢查 ${picked.length} 張內嵌圖片，沒有辨識到文字。` };
+
+            toast('OCR 完成，請校對辨識結果。', 3000);
+            const info = `共辨識 ${picked.length} 張圖片` + (skipped ? `（${skipped} 張無文字／低信心已略過）` : '') + (tooMany ? `（僅前 ${OCR_MAX_IMAGES} 張）` : '') + `，語言 ${OCR_LANG}`;
+            const reviewed = await ocrReviewDialog(file.name, parts.join('\n\n'), info, {
+                okLabel: '加入文件', cancelLabel: '略過圖片文字',
+                hint: '以下是檔案內嵌圖片的辨識文字，將附加在原有文字之後。請修正錯字或刪除不需要的段落；按「略過圖片文字」則只匯入原有文字。'
+            });
+            if (reviewed === null || !reviewed.trim()) return { text: '', warn: '已略過內嵌圖片的 OCR 文字。' };
+            return { text: reviewed, note: `已附加內嵌圖片 OCR 文字（${picked.length} 張，${OCR_LANG}${tooMany ? `，僅前 ${OCR_MAX_IMAGES} 張` : ''}），已由使用者校對。` };
         }
 
         async function extractDocx(buf) {
@@ -998,6 +1266,7 @@
 
         async function extractText(file, type) {
             if (TEXT_TYPES.includes(type)) return { text: await file.text() };
+            if (IMAGE_TYPES.includes(type)) return { text: '' };   // 圖片沒有內嵌文字，交給 OCR 流程
             const buf = await file.arrayBuffer();
             if (type === 'PDF') return extractPdf(buf);
             if (type === 'DOCX') return extractDocx(buf);
@@ -1011,6 +1280,7 @@
             event.target.value = '';
             let ok = 0, fail = 0, dup = 0;
             const newCourses = [];
+            const ocrOn = isOcrEnabled();
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
                 const type = file.name.split('.').pop().toUpperCase();
@@ -1026,15 +1296,38 @@
                 };
                 try {
                     const r = await extractText(file, type);
-                    const text = (r.text || '').replace(/\r\n/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-                    const bare = text.replace(/\[(第\d+頁|投影片\d+)\]/g, '').replace(/\s+/g, '');
+                    const norm = t => (t || '').replace(/\r\n/g, '\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+                    const stripMarks = t => t.replace(/\[(第\d+頁|投影片\d+)\]/g, '').replace(/\s+/g, '');
+                    let text = norm(r.text);
+                    let bare = stripMarks(text);
+                    let ocrNote = '', ocrWarn = '', skipReason = '';
+                    if (bare.length < 30 && (type === 'PDF' || IMAGE_TYPES.includes(type))) {
+                        if (!ocrOn) skipReason = 'off';
+                        else {
+                            const o = await runOcrFlow(file, type, i + 1, files.length);
+                            if (o.cancelled) skipReason = 'cancel';
+                            else { text = norm(o.text); bare = stripMarks(text); ocrNote = o.note; }
+                        }
+                    } else if (ocrOn && OFFICE_TYPES.includes(type)) {
+                        try {
+                            const o = await runOfficeOcr(file, type, i + 1, files.length);
+                            if (o && o.text) { text = norm(text + '\n\n' + o.text); bare = stripMarks(text); ocrNote = o.note; }
+                            else if (o && o.warn) ocrWarn = o.warn;
+                        } catch (e) { ocrWarn = e.message; }
+                    }
                     if (bare.length < 30) {
-                        doc.parseNote = type === 'PDF' ? '此 PDF 沒有可擷取的文字（可能是掃描圖片檔），目前不支援 OCR。' : '檔案中沒有可擷取的文字。';
+                        if (skipReason === 'off') doc.parseNote = type === 'PDF'
+                            ? '此 PDF 沒有可擷取的文字（可能是掃描圖片檔）。請在匯入區勾選「使用 OCR 辨識」後重新上傳。'
+                            : '圖片檔沒有可讀文字。請在匯入區勾選「使用 OCR 辨識」後重新上傳。';
+                        else if (skipReason === 'cancel') doc.parseNote = '已取消 OCR 結果匯入；如需辨識，請重新上傳。';
+                        else if (ocrNote) doc.parseNote = 'OCR 結果文字過少，未建立內容。';
+                        else doc.parseNote = ocrWarn || ('檔案中沒有可擷取的文字。' + (OFFICE_TYPES.includes(type) && !ocrOn ? '若內容是圖片，可勾選「使用 OCR 辨識」後重新上傳。' : ''));
                         fail++;
                     } else {
                         doc.content = text.slice(0, MAX_DOC_CHARS);
                         doc.chars = text.length;
-                        if (text.length > MAX_DOC_CHARS) doc.parseNote = `內容過長，僅保留前 ${MAX_DOC_CHARS} 字。`;
+                        doc.parseNote = [ocrNote, ocrWarn].filter(Boolean).join(' ');
+                        if (text.length > MAX_DOC_CHARS) doc.parseNote = (doc.parseNote ? doc.parseNote + ' ' : '') + `內容過長，僅保留前 ${MAX_DOC_CHARS} 字。`;
                         ok++;
                     }
                 } catch (err) {
@@ -3599,422 +3892,6 @@ show();<\/script></body></html>`;
     });
 })();
 
-// ===== 外掛 4：訓練變更影響審查（AI 初判 → Technical Trainer → SME → Release）=====
-(function () {
-    const { q, esc, uid, D, save, splitList, askJSON, cls, busyBtn, csvCell, dlCsv } = OJT;
-    const { inp, btn, pri, card } = cls;
-    const CATS = ['Training Package', 'OJT', 'ELRN', 'Checklist', 'Quiz', 'Learning Assignment', 'Certification', '其他'];
-    const PROMPT_VER = 'v1';
-    const STAGES = ['AI 初判', 'Technical Trainer Review', 'SME 確認', 'Release'];
-
-    // ================= 純函式（可獨立測試）=================
-    const CIR = {
-        norm: s => String(s == null ? '' : s).replace(/\s+/g, '').toLowerCase(),
-        HEAD: /^(#{1,6}\s+|第?\s*[0-9一二三四五六七八九十]+\s*[章節條]|chapter\s*\d+|section\s*\d+|step\s*\d+|q\s*\d+\s*[.:：、)]|問題\s*\d+|題\s*\d+|\d+(\.\d+)+\s|\d+[.)、]\s)/i,
-        // 解析後文字 → 逐行 [{loc,text,line}]，loc = 頁／投影片／工作表＋最近標題
-        lines(text) {
-            let marker = '', head = '', n = 0; const out = [];
-            for (const raw of String(text || '').replace(/\r/g, '').split('\n')) {
-                let t = raw.trim(); if (!t) continue;
-                const mk = /^\[(第\d+頁|投影片\d+|工作表：.+)\]$/.exec(t);
-                if (mk) { marker = mk[1]; head = ''; continue; }
-                const rw = /^R(\d+)：(.*)$/.exec(t);
-                if (rw) { out.push({ loc: `${marker} 第${rw[1]}列`.trim(), text: rw[2], line: ++n }); continue; }
-                t = t.replace(/^#{1,6}\s+/, '').replace(/\*\*/g, '');
-                if (CIR.HEAD.test(raw.trim()) && t.length <= 80) head = t.slice(0, 40);
-                out.push({ loc: [marker, head].filter(Boolean).join(' › ') || '全文', text: t, line: ++n });
-            }
-            return out;
-        },
-        // 同位置連續行合併成區塊（檢索粒度）
-        blocks(lines, max = 700) {
-            const out = [];
-            for (const l of lines) {
-                const b = out[out.length - 1];
-                if (b && b.loc === l.loc && b.text.length + l.text.length < max) b.text += '\n' + l.text;
-                else out.push({ loc: l.loc, text: l.text, start: l.line });
-            }
-            const cnt = {}; out.forEach(b => cnt[b.loc] = (cnt[b.loc] || 0) + 1);
-            out.forEach(b => { if (cnt[b.loc] > 1) b.loc += ` (L${b.start})`; });
-            return out;
-        },
-        sim(a, b) {
-            const A = bigrams(a), B = bigrams(b); if (!A.size || !B.size) return 0; let i = 0; A.forEach(g => { if (B.has(g)) i++; }); return i / (A.size + B.size - i);
-        },
-        // 逐行差異：共同前後綴＋LCS，之後把相鄰刪／增依相似度配成「修改」
-        diff(oldL, newL) {
-            const a = oldL.map(l => CIR.norm(l.text)), b = newL.map(l => CIR.norm(l.text));
-            let s = 0; while (s < a.length && s < b.length && a[s] === b[s]) s++;
-            let ea = a.length, eb = b.length; while (ea > s && eb > s && a[ea - 1] === b[eb - 1]) { ea--; eb--; }
-            const n = ea - s, m = eb - s; if (n * m > 25e6) throw new Error('文件差異範圍過大（超過 2,500 萬格），請拆成較小的章節再比對');
-            const W = m + 1, L = new Uint16Array((n + 1) * W);
-            for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--)
-                L[i * W + j] = a[s + i] === b[s + j] ? L[(i + 1) * W + j + 1] + 1 : Math.max(L[(i + 1) * W + j], L[i * W + j + 1]);
-            const ops = []; let i = 0, j = 0;
-            while (i < n && j < m) {
-                if (a[s + i] === b[s + j]) { ops.push(['=']); i++; j++; }
-                else if (L[(i + 1) * W + j] >= L[i * W + j + 1]) ops.push(['-', s + i++]); else ops.push(['+', s + j++]);
-            }
-            while (i < n) ops.push(['-', s + i++]); while (j < m) ops.push(['+', s + j++]);
-            const out = []; let dels = [], ins = [];
-            const flush = () => {
-                const used = new Set();
-                dels.forEach(di => {
-                    let best = -1, bs = 0.35; ins.forEach((ij, k) => { if (used.has(k)) return; const v = CIR.sim(oldL[di].text, newL[ij].text); if (v > bs) { bs = v; best = k; } });
-                    if (best >= 0) { used.add(best); out.push({ kind: 'modified', oldText: oldL[di].text, newText: newL[ins[best]].text, oldLoc: oldL[di].loc, newLoc: newL[ins[best]].loc }); }
-                    else out.push({ kind: 'removed', oldText: oldL[di].text, newText: '', oldLoc: oldL[di].loc, newLoc: '' });
-                });
-                ins.forEach((ij, k) => { if (!used.has(k)) out.push({ kind: 'added', oldText: '', newText: newL[ij].text, oldLoc: '', newLoc: newL[ij].loc }); });
-                dels = []; ins = [];
-            };
-            ops.forEach(o => { if (o[0] === '-') dels.push(o[1]); else if (o[0] === '+') ins.push(o[1]); else flush(); }); flush();
-            return out.map((c, k) => Object.assign({ id: 'C' + (k + 1) }, c));
-        },
-        // 單一變更說明文件（ECN）：每個區塊視為一項變更
-        fromEcn(lines) { return CIR.blocks(lines, 400).map((b, k) => ({ id: 'C' + (k + 1), kind: 'ecn', oldText: '', newText: b.text, oldLoc: '', newLoc: b.loc })); },
-        // 數值／代碼等「硬」特徵：舊版有、新版沒有者，最適合做獨立的規則比對
-        tokens(t) { return [...new Set((String(t).match(/[A-Za-z]*\d[0-9A-Za-z.\-_/%°℃]*/g) || []).filter(x => x.length >= 2))]; },
-        lostTokens(c) { const nw = new Set(CIR.tokens(c.newText).map(x => x.toLowerCase())); return CIR.tokens(c.oldText).filter(x => !nw.has(x.toLowerCase())); },
-        // 候選：訓練資產區塊中與此變更最相關者（可追溯來源命中者加權）
-        retrieve(c, assets, k = 6, ids = []) {
-            const qs = bigrams((c.oldText || '') + (c.newText || '')); if (!qs.size) return [];
-            const cands = [], need = Math.max(2, Math.min(3, Math.ceil(qs.size / 3)));
-            assets.forEach(a => {
-                const trace = ids.length && splitList(a.sources).some(s => ids.some(i => CIR.norm(i) === CIR.norm(s)));
-                (a.blocks || []).forEach((b, bi) => {
-                    const bg = bigrams(b.text); let sh = 0; qs.forEach(g => { if (bg.has(g)) sh++; });
-                    const score = sh / Math.sqrt(bg.size + 1) + (trace && sh >= 2 ? 1.5 : 0);
-                    if (sh >= need || (trace && sh >= 1)) cands.push({ assetId: a.id, assetName: a.name, cat: a.category, bi, loc: b.loc, text: b.text, score, trace: !!trace });
-                });
-            });
-            return cands.sort((x, y) => y.score - x.score).slice(0, k);
-        },
-        // 規則比對（不經 AI）：區塊仍含舊值、或與舊條文高度相似
-        ruleHits(c, assets) {
-            const lost = CIR.lostTokens(c), hits = [];
-            if (!c.oldText) return hits;
-            assets.forEach(a => (a.blocks || []).forEach((b, bi) => {
-                const low = b.text.toLowerCase(); const hit = lost.filter(t => low.includes(t.toLowerCase()));
-                if (hit.length) hits.push({ assetId: a.id, bi, reason: `仍含舊版數值／代碼：${hit.slice(0, 4).join('、')}` });
-                else if (CIR.sim(b.text, c.oldText) >= 0.6) hits.push({ assetId: a.id, bi, reason: '與舊版條文高度相似' });
-            }));
-            return hits;
-        },
-        evidenceOk(ev, text) { const e = CIR.norm(ev); return e.length >= 4 && CIR.norm(text).includes(e); },
-        // 成效指標：以 TT 採納／駁回／補漏判為準
-        metrics(reviews) {
-            let tp = 0, fp = 0, fn = 0; const times = [];
-            reviews.forEach(r => {
-                (r.findings || []).forEach(f => {
-                    if (f.src === 'manual') { if (f.decision === 'accepted') fn++; }
-                    else if (f.decision === 'accepted') tp++; else if (f.decision === 'rejected') fp++;
-                });
-                if (r.releasedAt && r.minutes > 0 && r.baselineMin > 0) times.push(1 - r.minutes / r.baselineMin);
-            });
-            return { n: reviews.length, tp, fp, fn, precision: tp + fp ? tp / (tp + fp) : null, recall: tp + fn ? tp / (tp + fn) : null,
-                timeCut: times.length ? times.reduce((a, b) => a + b, 0) / times.length : null, timeN: times.length };
-        },
-        canAdvance(r, to) {
-            const pend = (r.findings || []).filter(f => f.decision === 'pending').length, noAi = (r.changes || []).filter(c => c.aiStatus === 'failed').length;
-            if (to === 'tt') { if (!r.tt_name) return '請填 Technical Trainer 姓名'; if (pend) return `還有 ${pend} 筆發現未判定`; return ''; }
-            if (to === 'sme') { if (!r.signoff.tt) return '須先完成 TT Review 簽核'; if (!r.sme_name) return '請填 SME 姓名'; return ''; }
-            if (to === 'release') {
-                if (!r.signoff.sme) return '須先完成 SME 確認'; if (!(r.minutes > 0)) return '請填本次實際審查耗時（分鐘）';
-                if (r.tier === 'high' && !r.audited) return '高風險變更：須勾選「已逐一確認無影響候選」'; return '';
-            }
-            return '';
-        },
-        buildPrompt(changes, notes) {
-            const body = changes.map(c => `[${c.id}] 類型：${{ modified: '修改', removed: '刪除', added: '新增', ecn: '變更說明' }[c.kind]}\n` +
-                (c.oldText ? `  舊版：${c.oldText.slice(0, 500)}\n` : '') + (c.newText ? `  新版：${c.newText.slice(0, 500)}\n` : '') +
-                `  候選訓練內容：\n` + (c.cands.length ? c.cands.map(x => `   (${x.cid}) 《${x.assetName}》[${x.cat}] ${x.loc}：${x.text.slice(0, 500).replace(/\n/g, ' / ')}`).join('\n') : '   （無）')).join('\n\n');
-            return `你是訓練品質與法規符合的「變更影響審查助理」（Assistant，不是核准者）。判斷下列文件變更會影響哪些候選訓練內容。\n規則：\n1. 只能引用候選訓練內容，不得自行創造位置或內容。\n2. impact：yes＝內容與變更直接衝突需修改；maybe＝可能受影響、需人工判斷。不受影響的候選不要列出。\n3. evidence 必須「逐字」摘自該候選文字中受影響的那一句。\n4. 新增或變更的要求若所有候選都沒涵蓋，在 missing 描述遺漏；否則 missing 為空字串。\n5. 資訊不足以判斷時，unclear 設為 true，不要猜。\n${notes ? '6. 本單位補充規則：' + notes + '\n' : ''}\n${body}\n\n輸出 JSON：{"results":[{"change":"C1","impacts":[{"cand":"c1","impact":"yes或maybe","evidence":"","reason":"","action":"建議如何修改","confidence":0.0到1.0}],"missing":"","unclear":false}]}`;
-        }
-    };
-    window.CIR = CIR;
-
-    // ================= 狀態與儲存 =================
-    const C = () => { const d = D(); d.cir = d.cir || { assets: [], reviews: [], cfg: { notes: '', baselineMin: 60 } }; d.cir.cfg = d.cir.cfg || { notes: '', baselineMin: 60 }; return d.cir; };
-    const cache = {};
-    async function loadBlocks(a) { if (!cache[a.id]) { try { cache[a.id] = (await idbGet('cir_a_' + a.id)) || []; } catch (e) { cache[a.id] = []; } } return cache[a.id]; }
-    async function fullAssets() { const out = []; for (const a of C().assets) out.push(Object.assign({}, a, { blocks: await loadBlocks(a) })); return out; }
-    let draft = null, curId = null, view = 'assets';
-
-    async function parseFile(file) {
-        const type = file.name.split('.').pop().toUpperCase(); let text;
-        if (type === 'XLSX') {
-            await loadScript(LIB_URLS.xlsx); const wb = window.XLSX.read(await file.arrayBuffer(), { type: 'array' });
-            text = wb.SheetNames.map(n => {
-                const ws = wb.Sheets[n], r0 = ws['!ref'] ? window.XLSX.utils.decode_range(ws['!ref']).s.r : 0;
-                const rows = window.XLSX.utils.sheet_to_json(ws, { header: 1, raw: false, defval: '' });
-                return `[工作表：${n}]\n` + rows.map((r, i) => { const t = r.map(x => String(x).trim()).filter(Boolean).join(' | '); return t ? `R${r0 + i + 1}：${t}` : ''; }).filter(Boolean).join('\n');
-            }).join('\n\n');
-        } else if (type === 'DOCX') {
-            await loadScript(LIB_URLS.mammoth);
-            try { text = (await window.mammoth.convertToMarkdown({ arrayBuffer: await file.arrayBuffer() })).value.replace(/\\([\\`*_{}\[\]()#+\-.!])/g, '$1'); }
-            catch (e) { text = (await extractText(file, type)).text; }
-        } else if (['PDF', 'PPTX', 'TXT', 'MD', 'CSV', 'JSON'].includes(type)) text = (await extractText(file, type)).text;
-        else throw new Error('不支援的格式：' + type);
-        text = text.replace(/\r\n/g, '\n').trim(); if (text.replace(/\[[^\]]*\]|\s/g, '').length < 10) throw new Error('解析不到文字（若為掃描 PDF，請先 OCR）');
-        return { type, text };
-    }
-    function guessCat(n) { return /quiz|測驗|考題|題庫/i.test(n) ? 'Quiz' : /check|檢核|點檢/i.test(n) ? 'Checklist' : /ojt/i.test(n) ? 'OJT' : /elrn|e-?learn|線上/i.test(n) ? 'ELRN' : /cert|認證|證照/i.test(n) ? 'Certification' : /assign|指派/i.test(n) ? 'Learning Assignment' : 'Training Package'; }
-    const guessIds = t => [...new Set(String(t).slice(0, 6000).match(/\b[A-Z]{2,6}[-_]?\d{3,}[A-Z0-9\-]*\b/g) || [])].slice(0, 8).join('、');
-
-    // ================= HTML 骨架 =================
-    const html = `
-    <div><h2 class="text-2xl font-bold">訓練變更影響審查</h2>
-    <p class="text-sm text-slate-500">SPEC／SOP／OCAP／ECN 改版後，比對出變更，找出可能受影響的 Training Package、OJT、ELRN、Checklist、Quiz、Assignment、Certification。AI 只是 Assistant：AI 初判 → Technical Trainer → SME 確認 → Release，全程留紀錄並量測 KPI。支援 PDF／DOCX／XLSX／PPTX／MD／TXT。</p></div>
-    <div class="flex flex-wrap gap-2" id="ci-nav"></div>
-    <div id="ci-body" class="space-y-4"></div>`;
-
-    const navBtn = (id, t) => `<button data-v="${id}" class="${view === id ? pri : btn}">${t}</button>`;
-    function render() {
-        q('ci-nav').innerHTML = navBtn('assets', '① 訓練資產庫') + navBtn('new', '② 新增審查') + navBtn('bench', '③ 審查工作台') + navBtn('kpi', '④ KPI 儀表') + navBtn('bkm', '⑤ Prompt／Checklist／BKM');
-        ({ assets: vAssets, new: vNew, bench: vBench, kpi: vKpi, bkm: vBkm })[view]();
-    }
-
-    // ---- ① 資產庫 ----
-    function vAssets() {
-        const A = C().assets;
-        q('ci-body').innerHTML = `<div class="${card}">
-          <div class="text-lg font-bold">訓練資產庫（可追溯對照表）</div>
-          <div class="text-xs text-slate-500">匯入現有訓練教材。「來源文件編號」就是追溯對照：這份教材依據哪些 SPEC／SOP／OCAP（例如 SOP-1234）。已自動從內文抓取編號建議，請資深／Trainer 修正。解析後的文字存在本機 IndexedDB，不會上傳（AI 判讀時才會把相關片段送到你設定的 LLM）。</div>
-          <label class="${pri} inline-block cursor-pointer">匯入訓練資產（可多選）<input id="ci-up" type="file" multiple accept=".pdf,.docx,.xlsx,.pptx,.md,.txt" class="hidden"></label>
-          <span id="ci-upst" class="text-xs text-slate-500 ml-2"></span>
-          <div class="overflow-x-auto"><table class="w-full text-sm"><thead><tr class="text-left text-xs text-slate-500"><th class="p-1">檔名</th><th class="p-1">類別</th><th class="p-1">負責人</th><th class="p-1">來源文件編號（頓號分隔）</th><th class="p-1">區塊</th><th></th></tr></thead><tbody>
-          ${A.map(a => `<tr data-id="${a.id}"><td class="p-1 max-w-[14rem] truncate" title="${esc(a.name)}">${esc(a.name)}</td>
-            <td class="p-1"><select data-f="category" class="${inp}">${CATS.map(c => `<option${c === a.category ? ' selected' : ''}>${c}</option>`).join('')}</select></td>
-            <td class="p-1"><input data-f="owner" value="${esc(a.owner)}" class="${inp}"></td><td class="p-1"><input data-f="sources" value="${esc(a.sources)}" class="${inp}"></td>
-            <td class="p-1 text-xs text-slate-500">${a.nBlocks}</td><td class="p-1"><button data-rm="${a.id}" class="text-red-500 text-xs">✕</button></td></tr>`).join('') || `<tr><td colspan="6" class="p-4 text-center text-xs text-slate-400">尚未匯入。</td></tr>`}</tbody></table></div></div>`;
-    }
-
-    // ---- ② 新增審查 ----
-    function vNew() {
-        const d = draft || {};
-        q('ci-body').innerHTML = `<div class="${card}">
-          <div class="text-lg font-bold">變更內容</div>
-          <div class="grid md:grid-cols-3 gap-2">
-            <input id="ci-title" class="${inp}" placeholder="審查名稱（例如 ECN-5521 溫度參數修訂）" value="${esc(d.title || '')}">
-            <select id="ci-mode" class="${inp}"><option value="backtest">回測（歷史案例）</option><option value="shadow">影子模式（與人工並行）</option><option value="live">正式（輔助審查）</option></select>
-            <select id="ci-tier" class="${inp}"><option value="low">風險：低（無認證／品質影響）</option><option value="medium" selected>風險：中（內容修訂）</option><option value="high">風險：高（影響認證／品質）</option></select>
-          </div>
-          <input id="ci-ids" class="${inp}" placeholder="本次變更的文件編號（頓號分隔，用於追溯命中；留空則自動從檔名／內文抓取）" value="${esc(d.ids || '')}">
-          <div class="grid md:grid-cols-2 gap-3">
-            <div class="space-y-1"><div class="text-sm font-semibold">改版前（舊版）</div><label class="${btn} inline-block cursor-pointer">選檔<input id="ci-fo" type="file" accept=".pdf,.docx,.xlsx,.pptx,.md,.txt" class="hidden"></label> <span id="ci-fon" class="text-xs text-slate-500">${esc(d.oldName || '')}</span>
-              <textarea id="ci-to" rows="4" class="${inp}" placeholder="或直接貼上舊版文字">${esc(d.oldPaste || '')}</textarea></div>
-            <div class="space-y-1"><div class="text-sm font-semibold">改版後（新版）／或單一 ECN 變更說明</div><label class="${btn} inline-block cursor-pointer">選檔<input id="ci-fn" type="file" accept=".pdf,.docx,.xlsx,.pptx,.md,.txt" class="hidden"></label> <span id="ci-fnn" class="text-xs text-slate-500">${esc(d.newName || '')}</span>
-              <textarea id="ci-tn" rows="4" class="${inp}" placeholder="或直接貼上新版文字；若只有 ECN 說明，只填這欄">${esc(d.newPaste || '')}</textarea></div>
-          </div>
-          <button id="ci-diff" type="button" class="${pri}">計算變更清單</button>
-          <div id="ci-chg"></div></div>`;
-        if (d.mode) q('ci-mode').value = d.mode; if (d.tier) q('ci-tier').value = d.tier; drawChanges();
-    }
-    function drawChanges() {
-        const el = q('ci-chg'); if (!el || !draft || !draft.changes) return;
-        const ch = draft.changes, KL = { modified: '修改', removed: '刪除', added: '新增', ecn: '變更說明' };
-        el.innerHTML = `<div class="text-sm text-slate-500 my-2">共 ${ch.length} 項變更。取消勾選不需要送審的雜訊（排版、錯字）。每次送審上限 40 項。</div><div class="space-y-1 max-h-96 overflow-y-auto">
-          ${ch.map((c, i) => `<label class="flex gap-2 items-start rounded-lg bg-slate-50 dark:bg-slate-800/50 p-2 text-sm"><input type="checkbox" data-ck="${i}" ${c.on === false ? '' : 'checked'} class="mt-1">
-            <span><b class="text-xs px-1 rounded bg-slate-200 dark:bg-slate-700">${KL[c.kind]}</b> <span class="text-xs text-slate-400">${esc(c.oldLoc || c.newLoc)}</span>
-            ${c.oldText ? `<div class="text-red-600 dark:text-red-400">− ${esc(c.oldText.slice(0, 200))}</div>` : ''}${c.newText ? `<div class="text-emerald-600 dark:text-emerald-400">＋ ${esc(c.newText.slice(0, 200))}</div>` : ''}</span></label>`).join('')}</div>
-          <div class="flex gap-2 mt-3"><button id="ci-run" type="button" class="${pri}">開始 AI 初判</button><span class="text-xs text-slate-500 self-center">先用規則＋檢索找候選，再由 AI 判斷；AI 引用的證據會逐字驗證。</span></div>`;
-    }
-    async function readSide(fileEl, pasteId) {
-        const f = q(fileEl).files[0];
-        if (f) { const r = await parseFile(f); return { lines: CIR.lines(r.text), name: f.name, raw: r.text }; }
-        const t = q(pasteId).value.trim(); return t ? { lines: CIR.lines(t), name: '', raw: t } : null;
-    }
-    async function calcDiff() {
-        const o = await readSide('ci-fo', 'ci-to'), n = await readSide('ci-fn', 'ci-tn');
-        if (!n) throw new Error('請提供新版內容（或單一 ECN 說明）');
-        const ids = q('ci-ids').value.trim() || [...new Set([(o && o.name) || '', n.name, guessIds(n.raw)].join('、').match(/[A-Z]{2,6}[-_]?\d{3,}[A-Z0-9\-]*/g) || [])].join('、');
-        draft = { title: q('ci-title').value.trim(), mode: q('ci-mode').value, tier: q('ci-tier').value, ids, oldName: o ? o.name : '', newName: n.name, oldPaste: o && !o.name ? o.raw : '', newPaste: !n.name ? n.raw : '',
-            changes: (o ? CIR.diff(o.lines, n.lines) : CIR.fromEcn(n.lines)) };
-        q('ci-ids').value = ids; if (!draft.changes.length) toast('兩份文件沒有差異'); drawChanges();
-    }
-
-    async function runReview() {
-        const sel = draft.changes.filter(c => c.on !== false).slice(0, 40); if (!sel.length) throw new Error('請至少勾選一項變更');
-        const title = q('ci-title').value.trim() || draft.title || ('審查 ' + new Date().toLocaleDateString('zh-TW')); const assets = await fullAssets();
-        if (!assets.length) throw new Error('資產庫是空的，請先匯入訓練資產');
-        const ids = splitList(q('ci-ids').value), cfg = C().cfg, byId = Object.fromEntries(assets.map(a => [a.id, a]));
-        const rv = { id: uid('rv_'), title, mode: q('ci-mode').value, tier: q('ci-tier').value, ids: ids.join('、'), createdAt: Date.now(), promptVer: PROMPT_VER, baselineMin: cfg.baselineMin || 60, minutes: 0,
-            changes: [], findings: [], noImpact: [], signoff: {}, audited: false, tt_name: '', sme_name: '' };
-        const work = sel.map((c, k) => {
-            const cands = CIR.retrieve(c, assets, 6, ids).map((x, i) => Object.assign(x, { cid: 'c' + (i + 1) }));
-            return Object.assign({}, c, { id: 'C' + (k + 1), cands });
-        });
-        const mkF = (c, cand, o) => Object.assign({ id: uid('f_'), changeId: c.id, assetId: cand.assetId, assetName: cand.assetName, cat: cand.cat, loc: cand.loc, bi: cand.bi, src: 'ai', impact: 'maybe', evidence: '', evidenceOk: null, reason: '', action: '', conf: null, decision: 'pending', note: '' }, o);
-        // 規則比對（獨立於 AI）
-        work.forEach(c => {
-            CIR.ruleHits(c, assets).forEach(h => {
-                const a = byId[h.assetId], b = a.blocks[h.bi]; if (rv.findings.some(f => f.changeId === c.id && f.assetId === a.id && f.bi === h.bi)) return;
-                rv.findings.push(mkF(c, { assetId: a.id, assetName: a.name, cat: a.category, loc: b.loc, bi: h.bi }, { src: 'rule', impact: 'yes', reason: h.reason, evidence: b.text.slice(0, 160), evidenceOk: true }));
-            });
-        });
-        // AI 判斷（每 5 項一批）
-        for (let i = 0; i < work.length; i += 5) {
-            const batch = work.slice(i, i + 5); toast(`AI 初判中 ${Math.min(i + 5, work.length)} / ${work.length}…`, 0);
-            try {
-                const j = await askJSON(CIR.buildPrompt(batch, cfg.notes), '你是嚴謹的訓練變更影響審查助理。繁體中文，只輸出 JSON，不確定就說不確定。', 4000);
-                (Array.isArray(j.results) ? j.results : []).forEach(res => {
-                    const c = batch.find(x => x.id === res.change); if (!c) return; c.aiStatus = 'ok'; c.unclear = !!res.unclear; c.missing = String(res.missing || '').trim();
-                    (Array.isArray(res.impacts) ? res.impacts : []).forEach(im => {
-                        const cand = c.cands.find(x => x.cid === im.cand); if (!cand) return; const ok = CIR.evidenceOk(im.evidence, cand.text);
-                        const ex = rv.findings.find(f => f.changeId === c.id && f.assetId === cand.assetId && f.bi === cand.bi);
-                        const info = { reason: String(im.reason || ''), action: String(im.action || ''), conf: Number(im.confidence) || null, evidence: String(im.evidence || ''), evidenceOk: ok, impact: im.impact === 'yes' ? 'yes' : 'maybe' };
-                        if (ex) { ex.src = 'ai+rule'; ex.reason = info.reason + '；' + ex.reason; ex.action = info.action; ex.conf = info.conf; if (ok) { ex.evidence = info.evidence; } ex.impact = 'yes'; }
-                        else rv.findings.push(mkF(c, cand, info));
-                    });
-                    if (c.missing) rv.findings.push({ id: uid('f_'), changeId: c.id, assetId: '', assetName: '（待指定）', cat: '', loc: '', src: 'ai', impact: 'gap', evidence: '', evidenceOk: null, reason: '可能的內容遺漏：' + c.missing, action: '評估是否新增教材／測驗題／檢核步驟', conf: null, decision: 'pending', note: '' });
-                });
-                batch.forEach(c => { if (!c.aiStatus) c.aiStatus = 'failed'; });
-            } catch (e) { batch.forEach(c => { c.aiStatus = 'failed'; c.aiError = e.message; }); toast('AI 判讀失敗（' + e.message.slice(0, 60) + '），該批改由規則結果＋人工審查', 6000); }
-        }
-        work.forEach(c => {
-            c.cands.forEach(x => { if (!rv.findings.some(f => f.changeId === c.id && f.assetId === x.assetId && f.bi === x.bi)) rv.noImpact.push({ changeId: c.id, assetName: x.assetName, cat: x.cat, loc: x.loc, text: x.text.slice(0, 200) }); });
-            rv.changes.push({ id: c.id, kind: c.kind, oldText: c.oldText.slice(0, 800), newText: c.newText.slice(0, 800), loc: c.oldLoc || c.newLoc, aiStatus: c.aiStatus || 'failed', aiError: c.aiError || '', unclear: !!c.unclear, nCand: c.cands.length });
-        });
-        C().reviews.unshift(rv); save(); curId = rv.id; view = 'bench'; draft = null; toast(`初判完成：${rv.findings.length} 筆發現，請 Technical Trainer 逐筆確認`); render();
-    }
-
-    // ---- ③ 工作台 ----
-    const curRv = () => C().reviews.find(r => r.id === curId);
-    function vBench() {
-        const R = C().reviews;
-        if (!R.length) { q('ci-body').innerHTML = `<div class="${card} text-sm text-slate-400 text-center">尚無審查，請先到「② 新增審查」。</div>`; return; }
-        if (!curRv()) curId = R[0].id; const r = curRv(), A = C().assets;
-        const ML = { backtest: '回測', shadow: '影子', live: '正式' }, TL = { low: '低', medium: '中', high: '高' }, st = r.releasedAt ? 4 : r.signoff.sme ? 3 : r.signoff.tt ? 2 : 1;
-        const pend = r.findings.filter(f => f.decision === 'pending').length;
-        const decB = (f, d, t, c) => `<button data-fid="${f.id}" data-d="${d}" class="${btn} !py-1 ${f.decision === d ? c : ''}">${t}</button>`;
-        const fcard = f => `<div class="rounded-xl border border-slate-200 dark:border-slate-700 p-3 text-sm space-y-1" data-fcard="${f.id}">
-            <div class="flex flex-wrap gap-1 items-center"><b>${esc(f.assetName)}</b> <span class="text-xs text-slate-500">${esc(f.cat)}・${esc(f.loc)}</span>
-              <span class="text-xs px-1 rounded ${f.impact === 'yes' ? 'bg-red-100 text-red-700' : f.impact === 'gap' ? 'bg-purple-100 text-purple-700' : f.src === 'manual' ? 'bg-slate-200 text-slate-700' : 'bg-amber-100 text-amber-800'}">${{ yes: '需修改', maybe: '可能受影響', gap: '可能遺漏' }[f.impact] || '人工補充'}</span>
-              <span class="text-xs px-1 rounded bg-slate-200 dark:bg-slate-700">${{ ai: 'AI', rule: '規則', 'ai+rule': 'AI＋規則', manual: '人工補漏' }[f.src]}</span>${f.conf != null ? `<span class="text-xs text-slate-400">信心 ${Math.round(f.conf * 100)}%</span>` : ''}</div>
-            ${f.evidence ? `<div class="text-xs rounded bg-slate-50 dark:bg-slate-800/50 p-2">${f.evidenceOk === false ? '<span class="text-red-500">⚠ 引用文字未在原文找到，請人工核對　</span>' : '<span class="text-emerald-600">✔ 已對原文　</span>'}${esc(f.evidence)}</div>` : ''}
-            <div>${esc(f.reason)}</div>${f.action ? `<div class="text-xs text-slate-500">建議：${esc(f.action)}</div>` : ''}
-            <div class="flex flex-wrap gap-1 items-center">${decB(f, 'accepted', '✔ 採納', 'bg-emerald-100 dark:bg-emerald-900/40')}${decB(f, 'rejected', '✕ 駁回（誤報）', 'bg-red-100 dark:bg-red-900/40')}<input data-fnote="${f.id}" value="${esc(f.note)}" placeholder="備註" class="${inp} !w-48 !py-1"></div></div>`;
-        q('ci-body').innerHTML = `
-        <div class="${card}">
-          <div class="flex flex-wrap items-center gap-2"><select id="ci-sel" class="${inp} !w-auto">${R.map(x => `<option value="${x.id}"${x.id === r.id ? ' selected' : ''}>${esc(x.title)}</option>`).join('')}</select>
-            <span class="text-xs">模式：${ML[r.mode]}　風險：<b class="${r.tier === 'high' ? 'text-red-500' : ''}">${TL[r.tier]}</b>　Prompt ${esc(r.promptVer)}　編號：${esc(r.ids || '—')}</span>
-            <span class="ml-auto flex gap-1"><button id="ci-rep" class="${btn}">匯出報告 .html</button><button id="ci-csv" class="${btn}">匯出 .csv</button><button id="ci-del" class="${btn} text-red-500">刪除</button></span></div>
-          <div class="flex gap-1 text-xs">${STAGES.map((s, i) => `<div class="flex-1 text-center rounded-lg py-1 ${i < st ? 'bg-emerald-500 text-white' : i === st ? 'bg-brand-500 text-white' : 'bg-slate-200 dark:bg-slate-700'}">${s}</div>`).join('')}</div>
-          <div class="text-xs text-slate-500">AI 定位為 Assistant，不是 Approver。發現 ${r.findings.length} 筆，未判定 <b class="${pend ? 'text-red-500' : ''}">${pend}</b> 筆。${r.changes.some(c => c.aiStatus === 'failed') ? '<span class="text-red-500">⚠ 有變更的 AI 判讀失敗，僅有規則結果，請人工完整審查。</span>' : ''}</div>
-        </div>
-        ${r.changes.map(c => { const fs = r.findings.filter(f => f.changeId === c.id);
-            return `<div class="${card}"><div class="text-sm"><b>${c.id}</b> <span class="text-xs px-1 rounded bg-slate-200 dark:bg-slate-700">${{ modified: '修改', removed: '刪除', added: '新增', ecn: '變更說明' }[c.kind]}</span> <span class="text-xs text-slate-400">${esc(c.loc)}</span>
-              ${c.oldText ? `<div class="text-red-600 dark:text-red-400">− ${esc(c.oldText.slice(0, 240))}</div>` : ''}${c.newText ? `<div class="text-emerald-600 dark:text-emerald-400">＋ ${esc(c.newText.slice(0, 240))}</div>` : ''}
-              ${c.unclear ? '<div class="text-xs text-amber-600">AI 表示資訊不足，無法確定。</div>' : ''}${c.nCand === 0 ? '<div class="text-xs text-slate-400">找不到相關訓練內容候選（可能無影響，或資產庫未涵蓋）。</div>' : ''}</div>
-              ${fs.map(fcard).join('') || '<div class="text-xs text-slate-400">無發現。</div>'}
-              <details><summary class="cursor-pointer text-xs text-brand-600">＋ 補充 AI 漏判的影響</summary><div class="grid md:grid-cols-4 gap-1 mt-1" data-man="${c.id}"><select class="${inp}" data-m="asset">${A.map(a => `<option value="${a.id}">${esc(a.name)}</option>`).join('')}</select><input data-m="loc" class="${inp}" placeholder="位置（Chapter 3／Q5／Step 7）"><input data-m="note" class="${inp}" placeholder="說明"><button data-addm="${c.id}" class="${btn}">加入（計為漏判）</button></div></details></div>`; }).join('')}
-        <div class="${card}"><details><summary class="cursor-pointer text-sm font-semibold">AI 判定「無影響」的候選內容（${r.noImpact.length}）— 抽查用</summary><div class="text-xs space-y-1 mt-2 max-h-64 overflow-y-auto">${r.noImpact.map(n => `<div>${n.changeId}・<b>${esc(n.assetName)}</b> ${esc(n.loc)}：${esc(n.text)}</div>`).join('') || '（無）'}</div></details>
-          ${r.tier === 'high' ? `<label class="flex gap-2 text-sm"><input id="ci-aud" type="checkbox" ${r.audited ? 'checked' : ''}> 高風險變更：我已逐一確認上列「無影響」候選確實無影響</label>` : ''}</div>
-        <div class="${card}"><div class="text-lg font-bold">簽核與放行</div>
-          <div class="grid md:grid-cols-2 gap-3">
-            <div class="space-y-1"><div class="text-sm font-semibold">Technical Trainer Review ${r.signoff.tt ? `<span class="text-emerald-600 text-xs">✔ ${esc(r.tt_name)} ${new Date(r.signoff.tt).toLocaleString('zh-TW')}</span>` : ''}</div>
-              <div class="flex gap-1"><input id="ci-tt" value="${esc(r.tt_name)}" placeholder="姓名" class="${inp}" ${r.signoff.tt ? 'disabled' : ''}><button id="ci-ttb" class="${pri}" ${r.signoff.tt ? 'disabled' : ''}>TT 確認</button></div></div>
-            <div class="space-y-1"><div class="text-sm font-semibold">SME 確認 ${r.signoff.sme ? `<span class="text-emerald-600 text-xs">✔ ${esc(r.sme_name)} ${new Date(r.signoff.sme).toLocaleString('zh-TW')}</span>` : ''}</div>
-              <div class="flex gap-1"><input id="ci-sme" value="${esc(r.sme_name)}" placeholder="姓名" class="${inp}" ${r.signoff.sme ? 'disabled' : ''}><button id="ci-smeb" class="${pri}" ${r.signoff.sme ? 'disabled' : ''}>SME 確認</button></div></div></div>
-          <div class="flex flex-wrap gap-2 items-center text-sm">本次實際審查耗時（分）<input id="ci-min" type="number" min="1" value="${r.minutes || ''}" class="${inp} !w-24">　傳統人工預估基準（分）<input id="ci-base" type="number" min="1" value="${r.baselineMin || ''}" class="${inp} !w-24">
-            <button id="ci-rel" class="${pri}" ${r.releasedAt ? 'disabled' : ''}>${r.releasedAt ? '已 Release ' + new Date(r.releasedAt).toLocaleDateString('zh-TW') : 'Release'}</button><button id="ci-back" class="${btn}">退回重審</button></div>
-          <div id="ci-warn" class="text-xs text-red-500"></div></div>`;
-    }
-
-    // ---- ④ KPI ----
-    function vKpi() {
-        const R = C().reviews, live = R.filter(r => r.mode !== 'backtest'), rel = live.filter(r => r.releasedAt), M = CIR.metrics(live), B = CIR.metrics(R.filter(r => r.mode === 'backtest'));
-        const pct = v => v == null ? '—' : Math.round(v * 100) + '%', val = R.filter(r => r.releasedAt), both = val.filter(r => r.signoff.tt && r.signoff.sme).length;
-        const tile = (t, v, goal, ok) => `<div class="custom-card rounded-2xl border border-slate-200 dark:border-slate-700 p-4"><div class="text-xs text-slate-500">${t}</div><div class="text-3xl font-bold ${ok === true ? 'text-emerald-600' : ok === false ? 'text-red-500' : ''}">${v}</div><div class="text-xs text-slate-400">目標 ${goal}</div></div>`;
-        q('ci-body').innerHTML = `<div class="${card}"><div class="text-lg font-bold">FY27 KPI（影子＋正式審查；回測另列）</div>
-          <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
-            ${tile('Change Review Pilot（已 Release）', rel.length + ' 件', '≥ 10 件', rel.length >= 10)}
-            ${tile('Review 時間下降', M.timeCut == null ? '—' : Math.round(M.timeCut * 100) + '%', '≥ 30%', M.timeCut == null ? null : M.timeCut >= 0.3)}
-            ${tile('影響辨識：召回率（沒漏掉）', pct(M.recall), '≥ 90%', M.recall == null ? null : M.recall >= 0.9)}
-            ${tile('TT／SME 驗證', val.length ? Math.round(both / val.length * 100) + '%' : '—', '100%', val.length ? both === val.length : null)}</div>
-          <div class="text-xs text-slate-500">召回率＝AI／規則找到且被 TT 採納 ÷（找到且採納＋TT 補充的漏判）。精確率（誤報程度）：${pct(M.precision)}。樣本：採納 ${M.tp}、駁回 ${M.fp}、漏判 ${M.fn}；時間樣本 ${M.timeN} 件。</div></div>
-          <div class="${card}"><div class="text-lg font-bold">回測（歷史案例）</div><div class="text-sm">審查 ${B.n} 件｜召回率 ${pct(B.recall)}｜精確率 ${pct(B.precision)}（採納 ${B.tp}／駁回 ${B.fp}／漏判 ${B.fn}）</div>
-          <div class="text-xs text-slate-400">建議先用已知答案的舊 ECN 回測，達標再進影子模式、最後正式輔助。</div></div>
-          <div class="${card}"><div class="text-lg font-bold">審查清單</div><div class="text-sm space-y-1">${R.map(r => { const m = CIR.metrics([r]); return `<div>${esc(r.title)}・${{ backtest: '回測', shadow: '影子', live: '正式' }[r.mode]}・${r.releasedAt ? '已 Release' : '進行中'}・發現 ${r.findings.length}（採納 ${m.tp}／駁回 ${m.fp}／漏判 ${m.fn}）</div>`; }).join('') || '<span class="text-slate-400">（尚無）</span>'}</div></div>`;
-    }
-
-    // ---- ⑤ Prompt/Checklist/BKM ----
-    function bkmMd() {
-        return `# 訓練變更影響審查 BKM（Prompt ${PROMPT_VER}）\n\n## 1. 角色定位\nAI＝Assistant，不是 Approver。流程：AI 初判 → Technical Trainer Review → SME 確認 → Release。\n\n## 2. 輸入準備\n- 訓練資產庫：每份教材標註類別、負責人、來源文件編號（追溯對照表）\n- 變更：改版前／後文件（PDF／DOCX／XLSX／PPTX／MD／TXT），或單一 ECN 說明\n- 風險分級：低＝無認證／品質影響；中＝內容修訂；高＝影響 Certification／品質／法規\n\n## 3. AI Prompt（範本）\n\`\`\`\n${CIR.buildPrompt([{ id: 'C1', kind: 'modified', oldText: '（舊版條文）', newText: '（新版條文）', cands: [{ cid: 'c1', assetName: '（教材檔名）', cat: 'Quiz', loc: '（位置）', text: '（候選內容）' }] }], C().cfg.notes)}\n\`\`\`\n\n## 4. Technical Trainer Review Checklist\n- [ ] 每筆發現皆已「採納」或「駁回」；✔已對原文／⚠未對原文 皆已核對\n- [ ] 檢查 AI 標示「資訊不足」與「AI 判讀失敗」的變更\n- [ ] 檢查 Training Package、OJT／ELRN、Checklist、Quiz、Learning Assignment、Certification 是否同步\n- [ ] 是否有內容遺漏（新增要求沒有對應教材／測驗題／檢核步驟）\n- [ ] 抽查「無影響」候選；高風險須逐一確認\n- [ ] 漏判一律補登（用於計算召回率）\n\n## 5. SME 確認\n- [ ] 技術正確性、Certification 合規性；簽核人與時間已留存\n\n## 6. 指標定義\n- 召回率＝採納 ÷（採納＋補登漏判）；精確率＝採納 ÷（採納＋駁回）\n- Review 時間下降＝1 − 實際耗時 ÷ 傳統預估基準\n\n## 7. 導入階段\n回測（歷史 ECN）→ 影子模式 → 正式輔助。\n\n## 8. 單位補充規則\n${C().cfg.notes || '（無）'}\n`;
-    }
-    function vBkm() {
-        const cfg = C().cfg;
-        q('ci-body').innerHTML = `<div class="${card}"><div class="text-lg font-bold">單位補充規則（會附加在每次 AI 提示詞內）</div>
-          <textarea id="ci-notes" rows="4" class="${inp}" placeholder="例如：凡涉及溫度、時間、濃度、扭力數值變更，一律視為高影響；Certification 題庫任何相關題目都要列出。">${esc(cfg.notes)}</textarea>
-          <div class="flex items-center gap-2 text-sm">預設傳統人工審查基準（分鐘／件）<input id="ci-bl" type="number" min="1" value="${cfg.baselineMin}" class="${inp} !w-24"><button id="ci-cs" class="${pri}">儲存</button></div>
-          <div class="text-xs text-slate-500">基準請用「過去人工審查同類 ECN 的平均耗時」，KPI 的時間下降才可信。</div></div>
-          <div class="${card}"><div class="text-lg font-bold">Prompt＋Checklist＋BKM</div><button id="ci-bkm" class="${pri}">匯出 BKM .md</button><pre class="text-xs whitespace-pre-wrap rounded-xl bg-slate-50 dark:bg-slate-800/50 p-3 max-h-96 overflow-y-auto">${esc(bkmMd())}</pre></div>`;
-    }
-
-    // ---- 報表匯出 ----
-    function reportHtml(r) {
-        const e = esc, KL = { modified: '修改', removed: '刪除', added: '新增', ecn: '變更說明' };
-        return `<!doctype html><html lang="zh-TW"><head><meta charset="utf-8"><title>${e(r.title)}</title><style>body{font-family:system-ui,"Noto Sans TC",sans-serif;margin:24px;color:#111}table{border-collapse:collapse;width:100%;margin-bottom:16px}th,td{border:1px solid #999;padding:5px 7px;font-size:12px;vertical-align:top}th{background:#eee}.o{color:#b91c1c}.n{color:#047857}</style></head><body>
-<h2>訓練變更影響審查報告：${e(r.title)}</h2><p>模式：${r.mode}　風險：${r.tier}　編號：${e(r.ids)}　Prompt ${r.promptVer}<br>建立：${new Date(r.createdAt).toLocaleString('zh-TW')}　狀態：${r.releasedAt ? 'Released ' + new Date(r.releasedAt).toLocaleString('zh-TW') : '進行中'}<br>TT：${e(r.tt_name)} ${r.signoff.tt ? new Date(r.signoff.tt).toLocaleString('zh-TW') : '未簽'}　SME：${e(r.sme_name)} ${r.signoff.sme ? new Date(r.signoff.sme).toLocaleString('zh-TW') : '未簽'}<br>AI 為 Assistant，最終判定以 TT／SME 為準。</p>
-${r.changes.map(c => `<h3>${c.id} ${KL[c.kind]}　<small>${e(c.loc)}</small></h3>${c.oldText ? `<div class="o">− ${e(c.oldText)}</div>` : ''}${c.newText ? `<div class="n">＋ ${e(c.newText)}</div>` : ''}
-<table><tr><th>資產</th><th>類別</th><th>位置</th><th>判定</th><th>來源</th><th>原文證據</th><th>理由／建議</th><th>TT 決定</th><th>備註</th></tr>
-${r.findings.filter(f => f.changeId === c.id).map(f => `<tr><td>${e(f.assetName)}</td><td>${e(f.cat)}</td><td>${e(f.loc)}</td><td>${{ yes: '需修改', maybe: '可能', gap: '遺漏' }[f.impact] || '人工補漏'}</td><td>${f.src}</td><td>${e(f.evidence)}${f.evidenceOk === false ? ' ⚠未對原文' : ''}</td><td>${e(f.reason)}<br>${e(f.action)}</td><td>${{ accepted: '採納', rejected: '駁回', pending: '未判定' }[f.decision]}</td><td>${e(f.note)}</td></tr>`).join('') || '<tr><td colspan="9">無發現</td></tr>'}</table>`).join('')}
-<p>本次耗時 ${r.minutes || '—'} 分（基準 ${r.baselineMin} 分）。</p></body></html>`;
-    }
-
-    registerPlugin({
-        id: 'cir', title: '訓練變更影響審查', icon: 'fa-code-compare', badge: 'FY27', html,
-        init() {
-            render(); PLUGINS.cir.onShow = render;
-            const body = q('ci-body');
-            q('ci-nav').onclick = e => { const b = e.target.closest('[data-v]'); if (b) { view = b.dataset.v; render(); } };
-            body.addEventListener('change', async e => {
-                const t = e.target;
-                if (t.id === 'ci-up') {
-                    const files = Array.from(t.files); t.value = ''; let ok = 0;
-                    for (let i = 0; i < files.length; i++) {
-                        const f = files[i]; q('ci-upst').textContent = `解析 ${i + 1}/${files.length}：${f.name}`;
-                        try {
-                            const r = await parseFile(f), blocks = CIR.blocks(CIR.lines(r.text)), id = uid('as_'); await idbSet('cir_a_' + id, blocks); cache[id] = blocks;
-                            C().assets.push({ id, name: f.name, type: r.type, category: guessCat(f.name), owner: '', sources: guessIds(f.name + '\n' + r.text), nBlocks: blocks.length, chars: r.text.length, date: Date.now() }); ok++;
-                        } catch (er) { toast(`${f.name}：${er.message}`, 7000); }
-                    }
-                    save(); toast(`已匯入 ${ok} 份`); render();
-                } else if (t.dataset.f) { const a = C().assets.find(x => x.id === t.closest('tr').dataset.id); if (a) { a[t.dataset.f] = t.value; save(); } }
-                else if (t.id === 'ci-sel') { curId = t.value; render(); }
-                else if (t.dataset.ck != null) { draft.changes[+t.dataset.ck].on = t.checked; }
-                else if (t.id === 'ci-aud') { curRv().audited = t.checked; save(); }
-                else if (t.id === 'ci-min') { curRv().minutes = +t.value || 0; save(); }
-                else if (t.id === 'ci-base') { curRv().baselineMin = +t.value || 0; save(); }
-                else if (t.dataset.fnote) { const f = curRv().findings.find(x => x.id === t.dataset.fnote); if (f) { f.note = t.value; save(); } }
-            });
-            body.addEventListener('click', async e => {
-                const t = e.target.closest('button'); if (!t) return;
-                if (t.dataset.rm) { if (!confirm('移除這份資產？')) return; const c = C(); c.assets = c.assets.filter(a => a.id !== t.dataset.rm); delete cache[t.dataset.rm]; try { await idbSet('cir_a_' + t.dataset.rm, null); } catch (er) { } save(); render(); }
-                else if (t.id === 'ci-diff') busyBtn(t, '計算中…', async () => { try { await calcDiff(); } catch (er) { toast(er.message, 7000); } })();
-                else if (t.id === 'ci-run') busyBtn(t, '審查中…', async () => { try { await runReview(); } catch (er) { toast('失敗：' + er.message, 8000); } })();
-                else if (t.dataset.fid) { const r = curRv(), f = r.findings.find(x => x.id === t.dataset.fid); if (r.releasedAt) return toast('已 Release，請先「退回重審」'); f.decision = f.decision === t.dataset.d ? 'pending' : t.dataset.d; save(); vBench(); }
-                else if (t.dataset.addm) {
-                    const r = curRv(), box = t.closest('[data-man]'), a = C().assets.find(x => x.id === box.querySelector('[data-m=asset]').value), loc = box.querySelector('[data-m=loc]').value.trim(), note = box.querySelector('[data-m=note]').value.trim();
-                    if (!a || !loc) return toast('請選資產並填位置');
-                    r.findings.push({ id: uid('f_'), changeId: t.dataset.addm, assetId: a.id, assetName: a.name, cat: a.category, loc, src: 'manual', impact: 'manual', evidence: '', evidenceOk: null, reason: note || 'TT 人工補充（AI 漏判）', action: '', conf: null, decision: 'accepted', note: '' }); save(); vBench();
-                }
-                else if (t.id === 'ci-ttb' || t.id === 'ci-smeb' || t.id === 'ci-rel') {
-                    const r = curRv(), k = t.id === 'ci-ttb' ? 'tt' : t.id === 'ci-smeb' ? 'sme' : 'release';
-                    if (k === 'tt') r.tt_name = q('ci-tt').value.trim(); if (k === 'sme') r.sme_name = q('ci-sme').value.trim(); r.minutes = +q('ci-min').value || 0; r.baselineMin = +q('ci-base').value || r.baselineMin;
-                    const msg = CIR.canAdvance(r, k); if (msg) { q('ci-warn').textContent = '⚠ ' + msg; return; }
-                    if (k === 'release') r.releasedAt = Date.now(); else r.signoff[k] = Date.now(); save(); toast('已記錄'); vBench();
-                }
-                else if (t.id === 'ci-back') { const r = curRv(); if (!confirm('退回後簽核與 Release 會清除，需重新確認。')) return; r.signoff = {}; r.releasedAt = null; save(); vBench(); }
-                else if (t.id === 'ci-del') { if (!confirm('刪除此審查紀錄？')) return; const c = C(); c.reviews = c.reviews.filter(x => x.id !== curId); curId = null; save(); render(); }
-                else if (t.id === 'ci-rep') dlText(curRv().title + '_影響審查報告.html', reportHtml(curRv()), 'text/html');
-                else if (t.id === 'ci-csv') { const r = curRv(); dlCsv(r.title + '_影響審查.csv', [['變更', '類型', '舊版', '新版', '資產', '類別', '位置', '判定', '來源', '證據', '理由', '建議', 'TT決定', '備註']].concat(r.findings.map(f => { const c = r.changes.find(x => x.id === f.changeId) || {}; return [f.changeId, c.kind, c.oldText, c.newText, f.assetName, f.cat, f.loc, f.impact, f.src, f.evidence, f.reason, f.action, f.decision, f.note]; }))); }
-                else if (t.id === 'ci-cs') { const c = C().cfg; c.notes = q('ci-notes').value.trim(); c.baselineMin = +q('ci-bl').value || 60; save(); toast('已儲存'); vBkm(); }
-                else if (t.id === 'ci-bkm') dlText('訓練變更影響審查_BKM.md', bkmMd());
-            });
-        }
-    });
-})();
     </script>
 </body>
 </html>
